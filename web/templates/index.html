@@ -1,238 +1,319 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reddit Monitor - Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        .dashboard-card {
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-            transition: transform 0.2s;
-        }
-        .dashboard-card:hover {
-            transform: translateY(-2px);
-        }
-        .stat-card {
-            text-align: center;
-            padding: 20px;
-        }
-        .stat-number {
-            font-size: 2.5rem;
-            font-weight: bold;
-        }
-        .monitor-active {
-            color: #28a745;
-            font-weight: bold;
-        }
-        .monitor-inactive {
-            color: #dc3545;
-            font-weight: bold;
-        }
-    </style>
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a class="navbar-brand" href="/">Reddit Monitor</a>
-            <div class="collapse navbar-collapse">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/settings/reddit">Reddit Settings</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/settings/slack">Slack Settings</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/logout">Logout</a>
-                    </li>
-                </ul>
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Reddit Monitor{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2><i class="bi bi-speedometer2"></i> Dashboard</h2>
+                <p class="text-muted mb-0">Monitor Reddit, get Slack notifications</p>
+            </div>
+            <div>
+                <button id="btn-start-stop" class="btn btn-lg {% if config.monitor_running %}btn-danger{% else %}btn-success{% endif %}">
+                    <i class="bi bi-{% if config.monitor_running %}stop-circle{% else %}play-circle{% endif %}"></i>
+                    {% if config.monitor_running %}Monitor stoppen{% else %}Monitor starten{% endif %}
+                </button>
             </div>
         </div>
-    </nav>
+    </div>
+</div>
 
-    <div class="container mt-4">
-        <div class="row">
-            <div class="col-12">
-                <h1>Dashboard</h1>
-                <p class="text-muted">Monitor Reddit, get Slack notifications, reply with voice.</p>
+<!-- Status Cards -->
+<div class="row">
+    <div class="col-md-3 col-sm-6">
+        <div class="card mb-4">
+            <div class="card-body stat-card">
+                <h6 class="text-muted"><i class="bi bi-reddit"></i> Reddit</h6>
+                <div class="stat-number" id="reddit-status">
+                    {% if config.reddit_username %}
+                    <span class="status-active">Aktiv</span>
+                    {% else %}
+                    <span class="status-inactive">Inaktiv</span>
+                    {% endif %}
+                </div>
+                <small class="text-muted">{{ config.reddit_username or 'Nicht konfiguriert' }}</small>
             </div>
         </div>
+    </div>
 
-        <!-- Status Cards -->
-        <div class="row">
-            <div class="col-md-3">
-                <div class="card dashboard-card">
-                    <div class="card-body stat-card">
-                        <h5 class="card-title">Reddit Status</h5>
-                        <div class="stat-number">
-                            <span id="reddit-status" class="monitor-inactive">Inactive</span>
-                        </div>
-                        <p class="card-text">Login: <span id="reddit-login">Not configured</span></p>
-                    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card mb-4">
+            <div class="card-body stat-card">
+                <h6 class="text-muted"><i class="bi bi-slack"></i> Slack</h6>
+                <div class="stat-number" id="slack-status">
+                    {% if config.slack_webhook %}
+                    <span class="status-active">Aktiv</span>
+                    {% else %}
+                    <span class="status-inactive">Inaktiv</span>
+                    {% endif %}
                 </div>
-            </div>
-            
-            <div class="col-md-3">
-                <div class="card dashboard-card">
-                    <div class="card-body stat-card">
-                        <h5 class="card-title">Slack Status</h5>
-                        <div class="stat-number">
-                            <span id="slack-status" class="monitor-inactive">Inactive</span>
-                        </div>
-                        <p class="card-text">Webhook: <span id="slack-webhook">Not configured</span></p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-3">
-                <div class="card dashboard-card">
-                    <div class="card-body stat-card">
-                        <h5 class="card-title">Subreddits</h5>
-                        <div class="stat-number" id="subreddit-count">0</div>
-                        <p class="card-text">Configured subreddits</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-3">
-                <div class="card dashboard-card">
-                    <div class="card-body stat-card">
-                        <h5 class="card-title">Last Scan</h5>
-                        <div class="stat-number" id="last-scan">Never</div>
-                        <p class="card-text">Next scan: <span id="next-scan">-</span></p>
-                    </div>
-                </div>
+                <small class="text-muted">{{ config.slack_channel or 'Nicht konfiguriert' }}</small>
             </div>
         </div>
+    </div>
 
-        <!-- Actions -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card dashboard-card">
-                    <div class="card-body">
-                        <h5 class="card-title">Actions</h5>
-                        <div class="d-grid gap-2 d-md-block">
-                            <button id="btn-scan-now" class="btn btn-primary me-2">
-                                Scan Now
-                            </button>
-                            <button id="btn-view-logs" class="btn btn-secondary me-2">
-                                View Logs
-                            </button>
-                            <button id="btn-test-slack" class="btn btn-info me-2">
-                                Test Slack
-                            </button>
-                        </div>
-                    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card mb-4">
+            <div class="card-body stat-card">
+                <h6 class="text-muted"><i class="bi bi-collection"></i> Subreddits</h6>
+                <div class="stat-number" id="subreddit-count">
+                    {{ (config.subreddits or '').split('\n')|select|list|length }}
                 </div>
+                <small class="text-muted">konfiguriert</small>
             </div>
         </div>
+    </div>
 
-        <!-- Recent Posts -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card dashboard-card">
-                    <div class="card-body">
-                        <h5 class="card-title">Recent Posts</h5>
-                        <div id="recent-posts">
-                            <p class="text-muted">No posts found yet. Run a scan to see posts here.</p>
-                        </div>
-                    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card mb-4">
+            <div class="card-body stat-card">
+                <h6 class="text-muted"><i class="bi bi-clock-history"></i> Letzter Scan</h6>
+                <div id="last-scan-time" style="font-size: 1.2rem; color: var(--reddit-orange);">
+                    {% if config.last_scan %}
+                    {{ config.last_scan[:16] }}
+                    {% else %}
+                    Noch nie
+                    {% endif %}
+                </div>
+                <small class="text-muted">Interval: {{ config.scan_interval or 15 }} min</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Setup -->
+{% if not config.reddit_username or not config.slack_webhook %}
+<div class="row">
+    <div class="col-12">
+        <div class="alert alert-warning">
+            <h5><i class="bi bi-exclamation-triangle"></i> Setup erforderlich</h5>
+            <p class="mb-2">Folgende Einstellungen fehlen noch:</p>
+            <ul class="mb-0">
+                {% if not config.reddit_username %}
+                <li><a href="/settings/reddit" class="alert-link">Reddit-Account konfigurieren</a></li>
+                {% endif %}
+                {% if not config.slack_webhook %}
+                <li><a href="/settings/slack" class="alert-link">Slack-Webhook einrichten</a></li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Actions -->
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-lightning"></i> Aktionen
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2">
+                    <button id="btn-scan-now" class="btn btn-primary" {% if not config.reddit_username %}disabled{% endif %}>
+                        <i class="bi bi-search"></i> Jetzt scannen
+                    </button>
+                    <button id="btn-test-slack" class="btn btn-slack" {% if not config.slack_webhook %}disabled{% endif %}>
+                        <i class="bi bi-send"></i> Slack testen
+                    </button>
+                    <a href="/settings/reddit" class="btn btn-outline-light">
+                        <i class="bi bi-gear"></i> Reddit Settings
+                    </a>
+                    <a href="/settings/guardrails" class="btn btn-outline-light">
+                        <i class="bi bi-shield"></i> Guardrails
+                    </a>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // Load status on page load
-        async function loadStatus() {
-            try {
-                const response = await fetch('/api/status');
-                const data = await response.json();
-                
-                // Update UI
-                document.getElementById('reddit-status').textContent = 
-                    data.config.reddit.username ? 'Active' : 'Inactive';
-                document.getElementById('reddit-status').className = 
-                    data.config.reddit.username ? 'monitor-active' : 'monitor-inactive';
-                
-                document.getElementById('reddit-login').textContent = 
-                    data.config.reddit.username || 'Not configured';
-                
-                document.getElementById('slack-status').textContent = 
-                    data.config.slack.webhook_configured ? 'Active' : 'Inactive';
-                document.getElementById('slack-status').className = 
-                    data.config.slack.webhook_configured ? 'monitor-active' : 'monitor-inactive';
-                
-                document.getElementById('slack-webhook').textContent = 
-                    data.config.slack.webhook_configured ? 'Configured' : 'Not configured';
-                
-                document.getElementById('subreddit-count').textContent = 
-                    data.config.reddit.subreddits.length;
-                
-            } catch (error) {
-                console.error('Error loading status:', error);
-            }
-        }
-        
-        // Handle scan button
-        document.getElementById('btn-scan-now').addEventListener('click', async function() {
-            this.disabled = true;
-            this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Scanning...';
-            
-            try {
-                const response = await fetch('/api/scan', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    alert(`Scan complete! Found ${data.posts_found} posts.`);
-                    
-                    // Update last scan time
-                    const now = new Date();
-                    document.getElementById('last-scan').textContent = 
-                        now.toLocaleTimeString();
-                    
-                    // Show posts if any
-                    if (data.posts.length > 0) {
-                        let html = '<div class="list-group">';
-                        data.posts.forEach(post => {
-                            html += `
-                            <a href="${post.url}" target="_blank" class="list-group-item list-group-item-action">
-                                <div class="d-flex w-100 justify-content-between">
-                                    <h6 class="mb-1">${post.title}</h6>
-                                    <small>${post.upvotes} upvotes</small>
-                                </div>
-                                <p class="mb-1">${post.content}</p>
-                                <small>r/${post.subreddit} • ${post.author}</small>
-                            </a>
-                            `;
-                        });
-                        html += '</div>';
-                        document.getElementById('recent-posts').innerHTML = html;
-                    }
-                } else {
-                    alert(`Scan failed: ${data.error}`);
-                }
-                
-            } catch (error) {
-                alert(`Error: ${error.message}`);
-            } finally {
-                this.disabled = false;
-                this.textContent = 'Scan Now';
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-clock"></i> Monitor Status
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span>Status:</span>
+                    <span id="monitor-status" class="badge {% if config.monitor_running %}bg-success{% else %}bg-secondary{% endif %}">
+                        {% if config.monitor_running %}Laeuft{% else %}Gestoppt{% endif %}
+                    </span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span>Aktiv:</span>
+                    <span class="text-info">{{ config.active_start or '09:00' }} - {{ config.active_end or '17:00' }}</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>Naechster Scan:</span>
+                    <span id="next-scan" class="text-muted">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Posts -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-newspaper"></i> Gefundene Posts</span>
+                <span id="posts-count" class="badge bg-secondary">0</span>
+            </div>
+            <div class="card-body">
+                <div id="posts-container">
+                    <p class="text-muted text-center py-4">
+                        <i class="bi bi-inbox" style="font-size: 2rem;"></i><br>
+                        Noch keine Posts gefunden. Klicke auf "Jetzt scannen" um zu starten.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const csrfToken = '{{ csrf_token() }}';
+
+// Scan button
+document.getElementById('btn-scan-now').addEventListener('click', async function() {
+    this.disabled = true;
+    this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Scanne...';
+
+    try {
+        const response = await fetch('/api/scan', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
             }
         });
-        
-        // Load status on page load
-        document.addEventListener('DOMContentLoaded', loadStatus);
-    </script>
-</body>
-</html>
+
+        const data = await response.json();
+
+        if (data.success) {
+            document.getElementById('posts-count').textContent = data.posts_found;
+            document.getElementById('last-scan-time').textContent = new Date().toLocaleString('de-DE');
+
+            if (data.posts && data.posts.length > 0) {
+                let html = '<div class="list-group list-group-flush">';
+                data.posts.forEach(post => {
+                    html += `
+                    <a href="${post.url}" target="_blank" class="list-group-item list-group-item-action bg-transparent text-white border-0 border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">${post.title}</h6>
+                            <small class="text-warning">${post.upvotes} <i class="bi bi-arrow-up"></i></small>
+                        </div>
+                        <p class="mb-1 text-muted small">${post.content.substring(0, 150)}...</p>
+                        <small class="text-info">r/${post.subreddit} &bull; u/${post.author}</small>
+                        ${post.matched_keywords && post.matched_keywords.length > 0 ?
+                          `<br><small class="text-success"><i class="bi bi-check-circle"></i> Keywords: ${post.matched_keywords.join(', ')}</small>` : ''}
+                    </a>
+                    `;
+                });
+                html += '</div>';
+                document.getElementById('posts-container').innerHTML = html;
+            } else {
+                document.getElementById('posts-container').innerHTML = `
+                    <p class="text-muted text-center py-4">
+                        <i class="bi bi-check-circle text-success" style="font-size: 2rem;"></i><br>
+                        Scan abgeschlossen. Keine neuen Posts gefunden, die den Guardrails entsprechen.
+                    </p>
+                `;
+            }
+        } else {
+            alert('Fehler: ' + data.error);
+        }
+    } catch (error) {
+        alert('Fehler: ' + error.message);
+    } finally {
+        this.disabled = false;
+        this.innerHTML = '<i class="bi bi-search"></i> Jetzt scannen';
+    }
+});
+
+// Test Slack button
+document.getElementById('btn-test-slack').addEventListener('click', async function() {
+    this.disabled = true;
+    this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sende...';
+
+    try {
+        const response = await fetch('/api/slack/test', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            alert('Test-Nachricht erfolgreich gesendet!');
+        } else {
+            alert('Fehler: ' + data.error);
+        }
+    } catch (error) {
+        alert('Fehler: ' + error.message);
+    } finally {
+        this.disabled = false;
+        this.innerHTML = '<i class="bi bi-send"></i> Slack testen';
+    }
+});
+
+// Start/Stop Monitor button
+document.getElementById('btn-start-stop').addEventListener('click', async function() {
+    const isRunning = this.classList.contains('btn-danger');
+    const endpoint = isRunning ? '/api/monitor/stop' : '/api/monitor/start';
+
+    this.disabled = true;
+
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            if (data.status === 'running') {
+                this.className = 'btn btn-lg btn-danger';
+                this.innerHTML = '<i class="bi bi-stop-circle"></i> Monitor stoppen';
+                document.getElementById('monitor-status').className = 'badge bg-success';
+                document.getElementById('monitor-status').textContent = 'Laeuft';
+            } else {
+                this.className = 'btn btn-lg btn-success';
+                this.innerHTML = '<i class="bi bi-play-circle"></i> Monitor starten';
+                document.getElementById('monitor-status').className = 'badge bg-secondary';
+                document.getElementById('monitor-status').textContent = 'Gestoppt';
+            }
+        }
+    } catch (error) {
+        alert('Fehler: ' + error.message);
+    } finally {
+        this.disabled = false;
+    }
+});
+
+// Load status on page load
+async function loadStatus() {
+    try {
+        const response = await fetch('/api/status');
+        const data = await response.json();
+        // Update UI with status
+    } catch (error) {
+        console.error('Error loading status:', error);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadStatus);
+</script>
+{% endblock %}

@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Slack Settings - Reddit Monitor{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2><i class="bi bi-slack"></i> Slack Einstellungen</h2>
+        <p class="text-muted">Konfiguriere Slack-Benachrichtigungen</p>
+    </div>
+</div>
+
+<form method="POST" action="/settings/slack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="row">
+        <!-- Webhook Configuration -->
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-link-45deg"></i> Webhook Konfiguration
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="webhook_url" class="form-label">Slack Webhook URL</label>
+                        <input type="url" class="form-control" id="webhook_url" name="webhook_url"
+                               value="{{ config.slack_webhook or '' }}"
+                               placeholder="Deine Slack Webhook URL hier einfuegen">
+                        <div class="form-text">
+                            Webhook URL von Slack.
+                            <a href="https://api.slack.com/messaging/webhooks" target="_blank" class="text-warning">
+                                Anleitung zum Erstellen
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="slack_channel" class="form-label">Channel</label>
+                        <input type="text" class="form-control" id="slack_channel" name="slack_channel"
+                               value="{{ config.slack_channel or '#general' }}" placeholder="#general">
+                        <div class="form-text">Slack-Channel fuer Benachrichtigungen</div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="bot_username" class="form-label">Bot Username</label>
+                                <input type="text" class="form-control" id="bot_username" name="bot_username"
+                                       value="{{ config.bot_username or 'Reddit Monitor' }}" placeholder="Reddit Monitor">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="bot_emoji" class="form-label">Bot Emoji</label>
+                                <input type="text" class="form-control" id="bot_emoji" name="bot_emoji"
+                                       value="{{ config.bot_emoji or ':robot_face:' }}" placeholder=":robot_face:">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status & Test -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-activity"></i> Status
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span>Webhook:</span>
+                        <span class="badge {% if config.slack_webhook %}bg-success{% else %}bg-secondary{% endif %}">
+                            {% if config.slack_webhook %}Konfiguriert{% else %}Nicht konfiguriert{% endif %}
+                        </span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span>Channel:</span>
+                        <span class="text-info">{{ config.slack_channel or '-' }}</span>
+                    </div>
+
+                    <hr style="border-color: rgba(255,255,255,0.2);">
+
+                    <button type="button" id="btn-test-slack" class="btn btn-slack w-100" {% if not config.slack_webhook %}disabled{% endif %}>
+                        <i class="bi bi-send"></i> Test-Nachricht senden
+                    </button>
+                    <div id="test-result" class="mt-2"></div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-bell"></i> Benachrichtigungstypen
+                </div>
+                <div class="card-body">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="notify_new_posts" name="notify_new_posts"
+                               {% if config.notify_new_posts != False %}checked{% endif %}>
+                        <label class="form-check-label" for="notify_new_posts">
+                            Neue Posts
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="notify_keywords" name="notify_keywords"
+                               {% if config.notify_keywords != False %}checked{% endif %}>
+                        <label class="form-check-label" for="notify_keywords">
+                            Keyword-Matches
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="notify_errors" name="notify_errors"
+                               {% if config.notify_errors %}checked{% endif %}>
+                        <label class="form-check-label" for="notify_errors">
+                            Fehler & Warnungen
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="bi bi-check-lg"></i> Einstellungen speichern
+                </button>
+                <a href="/" class="btn btn-outline-secondary btn-lg">
+                    <i class="bi bi-arrow-left"></i> Zurueck
+                </a>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('btn-test-slack').addEventListener('click', async function() {
+    this.disabled = true;
+    this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sende...';
+
+    const resultDiv = document.getElementById('test-result');
+
+    try {
+        const response = await fetch('/api/slack/test', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            resultDiv.innerHTML = '<div class="alert alert-success py-2 small">Test erfolgreich!</div>';
+        } else {
+            resultDiv.innerHTML = '<div class="alert alert-danger py-2 small">Fehler: ' + data.error + '</div>';
+        }
+    } catch (error) {
+        resultDiv.innerHTML = '<div class="alert alert-danger py-2 small">Fehler: ' + error.message + '</div>';
+    } finally {
+        this.disabled = false;
+        this.innerHTML = '<i class="bi bi-send"></i> Test-Nachricht senden';
+    }
+});
+</script>
+{% endblock %}

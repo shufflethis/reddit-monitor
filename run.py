@@ -6,27 +6,35 @@ reddit-monitor - Entry point for the Reddit Monitoring Tool
 import sys
 import os
 
-# Add app directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
+# Add project root to path
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, project_root)
 
 from app.config import setup_logging
-from web.app import create_app
 
 def main():
     """Main entry point"""
     # Setup logging
     setup_logging()
-    
-    # Create Flask app
-    app = create_app()
-    
+
+    # Import after path setup
+    from web.app import app
+
     # Run the app
     port = int(os.getenv('PORT', 5000))
-    debug = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
-    
-    print(f"Starting Reddit Monitor on http://localhost:{port}")
-    print("Press Ctrl+C to stop")
-    
+    debug = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
+
+    print(f"""
+    ╔══════════════════════════════════════════════╗
+    ║           Reddit Monitor v1.0                ║
+    ║──────────────────────────────────────────────║
+    ║  Server: http://localhost:{port}               ║
+    ║  Debug:  {debug}                               ║
+    ╚══════════════════════════════════════════════╝
+
+    Press Ctrl+C to stop
+    """)
+
     app.run(host='0.0.0.0', port=port, debug=debug)
 
 if __name__ == '__main__':

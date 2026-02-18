@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Registrieren - Reddit Monitor{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header text-center">
+                <h4><i class="bi bi-person-plus"></i> Account erstellen</h4>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" action="/register">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <div class="mb-3">
+                        <label for="username" class="form-label">
+                            <i class="bi bi-person"></i> Username
+                        </label>
+                        <input type="text" class="form-control" id="username" name="username"
+                               placeholder="Waehle einen Username" required autofocus>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label">
+                            <i class="bi bi-key"></i> Password
+                        </label>
+                        <input type="password" class="form-control" id="password" name="password"
+                               placeholder="Waehle ein sicheres Passwort" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password2" class="form-label">
+                            <i class="bi bi-key-fill"></i> Password wiederholen
+                        </label>
+                        <input type="password" class="form-control" id="password2" name="password2"
+                               placeholder="Passwort bestaetigen" required>
+                    </div>
+
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-person-plus"></i> Registrieren
+                        </button>
+                    </div>
+                </form>
+
+                <hr class="my-4" style="border-color: rgba(255,255,255,0.2);">
+
+                <div class="text-center">
+                    <small class="text-muted">
+                        Schon einen Account? <a href="/login" class="text-warning">Jetzt einloggen</a>
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

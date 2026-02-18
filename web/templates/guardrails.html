@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Guardrails - Reddit Monitor{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2><i class="bi bi-shield-check"></i> Guardrails</h2>
+        <p class="text-muted">Filtere Posts nach Keywords, Flairs und mehr</p>
+    </div>
+</div>
+
+<form method="POST" action="/settings/guardrails">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="row">
+        <!-- Keywords -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-search"></i> Keyword Filter
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="keywords" class="form-label">
+                            <span class="text-success"><i class="bi bi-check-circle"></i></span> Erforderliche Keywords
+                        </label>
+                        <textarea class="form-control" id="keywords" name="keywords" rows="4"
+                                  placeholder="python&#10;flask&#10;api">{{ config.keywords or '' }}</textarea>
+                        <div class="form-text">Posts muessen mindestens eins dieser Keywords enthalten</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="exclude_keywords" class="form-label">
+                            <span class="text-danger"><i class="bi bi-x-circle"></i></span> Ausgeschlossene Keywords
+                        </label>
+                        <textarea class="form-control" id="exclude_keywords" name="exclude_keywords" rows="4"
+                                  placeholder="spam&#10;nsfw&#10;clickbait">{{ config.exclude_keywords or '' }}</textarea>
+                        <div class="form-text">Posts mit diesen Keywords werden ignoriert</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Flairs -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-tag"></i> Flair Filter
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="required_flairs" class="form-label">
+                            <span class="text-success"><i class="bi bi-check-circle"></i></span> Erforderliche Flairs
+                        </label>
+                        <textarea class="form-control" id="required_flairs" name="required_flairs" rows="4"
+                                  placeholder="Discussion&#10;Question&#10;Help">{{ config.required_flairs or '' }}</textarea>
+                        <div class="form-text">Nur Posts mit diesen Flairs (leer = alle)</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="exclude_flairs" class="form-label">
+                            <span class="text-danger"><i class="bi bi-x-circle"></i></span> Ausgeschlossene Flairs
+                        </label>
+                        <textarea class="form-control" id="exclude_flairs" name="exclude_flairs" rows="4"
+                                  placeholder="Meme&#10;Shitpost&#10;Meta">{{ config.exclude_flairs or '' }}</textarea>
+                        <div class="form-text">Posts mit diesen Flairs werden ignoriert</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Numeric Filters -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-bar-chart"></i> Numerische Filter
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="min_upvotes" class="form-label">Minimum Upvotes</label>
+                        <input type="number" class="form-control" id="min_upvotes" name="min_upvotes"
+                               value="{{ config.min_upvotes or 5 }}" min="0" max="10000">
+                        <div class="form-text">Posts brauchen mindestens so viele Upvotes</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="min_comments" class="form-label">Minimum Kommentare</label>
+                        <input type="number" class="form-control" id="min_comments" name="min_comments"
+                               value="{{ config.min_comments or 0 }}" min="0" max="1000">
+                        <div class="form-text">Posts brauchen mindestens so viele Kommentare</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="max_age_hours" class="form-label">Maximales Alter (Stunden)</label>
+                        <input type="number" class="form-control" id="max_age_hours" name="max_age_hours"
+                               value="{{ config.max_age_hours or 24 }}" min="1" max="168">
+                        <div class="form-text">Ignoriere Posts aelter als X Stunden</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="bi bi-eye"></i> Filter Vorschau
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <strong>Aktive Filter:</strong>
+                        <ul class="mb-0 mt-2">
+                            {% if config.keywords %}
+                            <li>Keywords: {{ config.keywords.split('\n')|select|list|length }} aktiv</li>
+                            {% endif %}
+                            {% if config.exclude_keywords %}
+                            <li>Ausgeschlossene Keywords: {{ config.exclude_keywords.split('\n')|select|list|length }}</li>
+                            {% endif %}
+                            {% if config.required_flairs %}
+                            <li>Erforderliche Flairs: {{ config.required_flairs.split('\n')|select|list|length }}</li>
+                            {% endif %}
+                            <li>Minimum Upvotes: {{ config.min_upvotes or 5 }}</li>
+                            <li>Maximales Alter: {{ config.max_age_hours or 24 }}h</li>
+                        </ul>
+                    </div>
+
+                    <p class="text-muted small">
+                        <i class="bi bi-info-circle"></i>
+                        Posts die alle Filter passieren werden an Slack gesendet.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="bi bi-check-lg"></i> Guardrails speichern
+                </button>
+                <a href="/" class="btn btn-outline-secondary btn-lg">
+                    <i class="bi bi-arrow-left"></i> Zurueck
+                </a>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
