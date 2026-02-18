@@ -376,11 +376,7 @@ def api_slack_test():
         from slack_sdk.webhook import WebhookClient
 
         webhook = WebhookClient(config.get('slack_webhook'))
-        response = webhook.send(
-            text="Test-Nachricht vom Reddit Monitor!",
-            username=config.get('bot_username', 'Reddit Monitor'),
-            icon_emoji=config.get('bot_emoji', ':robot_face:')
-        )
+        response = webhook.send(text="Test-Nachricht vom Reddit Monitor! Das Setup funktioniert.")
 
         if response.status_code == 200:
             return jsonify({'success': True, 'message': 'Test erfolgreich!'})

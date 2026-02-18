@@ -9,3 +9,5 @@ data/*.log
 .DS_Store
 data/db/
 data/logs/
+data/config.json
+data/users.json

@@ -32,9 +32,7 @@ class SlackNotifier:
         try:
             response = self.webhook.send(
                 text=message,
-                attachments=attachments or [],
-                username=config.slack.username,
-                icon_emoji=config.slack.icon_emoji
+                attachments=attachments or []
             )
             
             if response.status_code == 200:
