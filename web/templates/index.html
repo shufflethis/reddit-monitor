@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reddit Monitor - Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .dashboard-card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            transition: transform 0.2s;
+        }
+        .dashboard-card:hover {
+            transform: translateY(-2px);
+        }
+        .stat-card {
+            text-align: center;
+            padding: 20px;
+        }
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+        }
+        .monitor-active {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .monitor-inactive {
+            color: #dc3545;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Reddit Monitor</a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings/reddit">Reddit Settings</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings/slack">Slack Settings</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/logout">Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1>Dashboard</h1>
+                <p class="text-muted">Monitor Reddit, get Slack notifications, reply with voice.</p>
+            </div>
+        </div>
+
+        <!-- Status Cards -->
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card dashboard-card">
+                    <div class="card-body stat-card">
+                        <h5 class="card-title">Reddit Status</h5>
+                        <div class="stat-number">
+                            <span id="reddit-status" class="monitor-inactive">Inactive</span>
+                        </div>
+                        <p class="card-text">Login: <span id="reddit-login">Not configured</span></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <div class="card dashboard-card">
+                    <div class="card-body stat-card">
+                        <h5 class="card-title">Slack Status</h5>
+                        <div class="stat-number">
+                            <span id="slack-status" class="monitor-inactive">Inactive</span>
+                        </div>
+                        <p class="card-text">Webhook: <span id="slack-webhook">Not configured</span></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <div class="card dashboard-card">
+                    <div class="card-body stat-card">
+                        <h5 class="card-title">Subreddits</h5>
+                        <div class="stat-number" id="subreddit-count">0</div>
+                        <p class="card-text">Configured subreddits</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <div class="card dashboard-card">
+                    <div class="card-body stat-card">
+                        <h5 class="card-title">Last Scan</h5>
+                        <div class="stat-number" id="last-scan">Never</div>
+                        <p class="card-text">Next scan: <span id="next-scan">-</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card dashboard-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Actions</h5>
+                        <div class="d-grid gap-2 d-md-block">
+                            <button id="btn-scan-now" class="btn btn-primary me-2">
+                                Scan Now
+                            </button>
+                            <button id="btn-view-logs" class="btn btn-secondary me-2">
+                                View Logs
+                            </button>
+                            <button id="btn-test-slack" class="btn btn-info me-2">
+                                Test Slack
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Posts -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card dashboard-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Recent Posts</h5>
+                        <div id="recent-posts">
+                            <p class="text-muted">No posts found yet. Run a scan to see posts here.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Load status on page load
+        async function loadStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                // Update UI
+                document.getElementById('reddit-status').textContent = 
+                    data.config.reddit.username ? 'Active' : 'Inactive';
+                document.getElementById('reddit-status').className = 
+                    data.config.reddit.username ? 'monitor-active' : 'monitor-inactive';
+                
+                document.getElementById('reddit-login').textContent = 
+                    data.config.reddit.username || 'Not configured';
+                
+                document.getElementById('slack-status').textContent = 
+                    data.config.slack.webhook_configured ? 'Active' : 'Inactive';
+                document.getElementById('slack-status').className = 
+                    data.config.slack.webhook_configured ? 'monitor-active' : 'monitor-inactive';
+                
+                document.getElementById('slack-webhook').textContent = 
+                    data.config.slack.webhook_configured ? 'Configured' : 'Not configured';
+                
+                document.getElementById('subreddit-count').textContent = 
+                    data.config.reddit.subreddits.length;
+                
+            } catch (error) {
+                console.error('Error loading status:', error);
+            }
+        }
+        
+        // Handle scan button
+        document.getElementById('btn-scan-now').addEventListener('click', async function() {
+            this.disabled = true;
+            this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Scanning...';
+            
+            try {
+                const response = await fetch('/api/scan', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`Scan complete! Found ${data.posts_found} posts.`);
+                    
+                    // Update last scan time
+                    const now = new Date();
+                    document.getElementById('last-scan').textContent = 
+                        now.toLocaleTimeString();
+                    
+                    // Show posts if any
+                    if (data.posts.length > 0) {
+                        let html = '<div class="list-group">';
+                        data.posts.forEach(post => {
+                            html += `
+                            <a href="${post.url}" target="_blank" class="list-group-item list-group-item-action">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1">${post.title}</h6>
+                                    <small>${post.upvotes} upvotes</small>
+                                </div>
+                                <p class="mb-1">${post.content}</p>
+                                <small>r/${post.subreddit} • ${post.author}</small>
+                            </a>
+                            `;
+                        });
+                        html += '</div>';
+                        document.getElementById('recent-posts').innerHTML = html;
+                    }
+                } else {
+                    alert(`Scan failed: ${data.error}`);
+                }
+                
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            } finally {
+                this.disabled = false;
+                this.textContent = 'Scan Now';
+            }
+        });
+        
+        // Load status on page load
+        document.addEventListener('DOMContentLoaded', loadStatus);
+    </script>
+</body>
+</html>
