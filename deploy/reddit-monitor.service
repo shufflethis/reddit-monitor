@@ -1,0 +1,15 @@
+[Unit]
+Description=Reddit Monitor Flask App
+After=network.target
+
+[Service]
+User=claude
+WorkingDirectory=/home/claude/.openclaw/workspace/reddit-monitor
+ExecStart=/usr/bin/python3 /home/claude/.openclaw/workspace/reddit-monitor/run.py
+Restart=always
+RestartSec=5
+Environment=PORT=5001
+Environment=FLASK_DEBUG=false
+
+[Install]
+WantedBy=multi-user.target

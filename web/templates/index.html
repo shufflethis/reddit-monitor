@@ -3,176 +3,255 @@
 {% block title %}Dashboard - Reddit Monitor{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <h2><i class="bi bi-speedometer2"></i> Dashboard</h2>
-                <p class="text-muted mb-0">Monitor Reddit, get Slack notifications</p>
+<!-- Page Header -->
+<div class="page-header fade-in-up">
+    <div class="flex justify-between items-center flex-wrap gap-2">
+        <div>
+            <h1 class="page-title"><i class="bi bi-grid-1x2"></i> Dashboard</h1>
+            <p class="page-subtitle">Ueberwache Reddit, erhalte Slack-Benachrichtigungen</p>
+        </div>
+        <button id="btn-start-stop" class="btn {% if config.monitor_running %}btn-danger{% else %}btn-success{% endif %} btn-lg">
+            <i class="bi bi-{% if config.monitor_running %}stop-circle{% else %}play-circle{% endif %}"></i>
+            <span>{% if config.monitor_running %}Stoppen{% else %}Starten{% endif %}</span>
+        </button>
+    </div>
+</div>
+
+<!-- Stats Grid -->
+<div class="grid grid-4 mb-4">
+    <div class="card fade-in-up stagger-1">
+        <div class="stat-card">
+            <div class="stat-icon" style="background: var(--accent-soft);">
+                <i class="bi bi-reddit"></i>
             </div>
-            <div>
-                <button id="btn-start-stop" class="btn btn-lg {% if config.monitor_running %}btn-danger{% else %}btn-success{% endif %}">
-                    <i class="bi bi-{% if config.monitor_running %}stop-circle{% else %}play-circle{% endif %}"></i>
-                    {% if config.monitor_running %}Monitor stoppen{% else %}Monitor starten{% endif %}
-                </button>
+            <div class="stat-label">Reddit</div>
+            <div class="stat-value {% if config.reddit_username %}success{% else %}danger{% endif %}">
+                {% if config.reddit_username %}Online{% else %}Offline{% endif %}
             </div>
+            <div class="stat-meta">{{ config.reddit_username or 'Nicht konfiguriert' }}</div>
+        </div>
+    </div>
+
+    <div class="card fade-in-up stagger-2">
+        <div class="stat-card">
+            <div class="stat-icon" style="background: rgba(74, 21, 75, 0.2);">
+                <i class="bi bi-slack" style="color: #e01e5a;"></i>
+            </div>
+            <div class="stat-label">Slack</div>
+            <div class="stat-value {% if config.slack_webhook %}success{% else %}danger{% endif %}">
+                {% if config.slack_webhook %}Aktiv{% else %}Inaktiv{% endif %}
+            </div>
+            <div class="stat-meta">{{ config.slack_channel or 'Nicht konfiguriert' }}</div>
+        </div>
+    </div>
+
+    <div class="card fade-in-up stagger-3">
+        <div class="stat-card">
+            <div class="stat-icon" style="background: var(--success-glow);">
+                <i class="bi bi-collection" style="color: var(--success);"></i>
+            </div>
+            <div class="stat-label">Subreddits</div>
+            <div class="stat-value accent" id="subreddit-count">
+                {{ (config.subreddits or '').split('\n')|select|list|length }}
+            </div>
+            <div class="stat-meta">werden ueberwacht</div>
+        </div>
+    </div>
+
+    <div class="card fade-in-up stagger-4">
+        <div class="stat-card">
+            <div class="stat-icon">
+                <i class="bi bi-clock-history"></i>
+            </div>
+            <div class="stat-label">Letzter Scan</div>
+            <div class="stat-value" id="last-scan-time" style="font-size: 1rem; color: var(--text-secondary);">
+                {% if config.last_scan %}{{ config.last_scan[:16] }}{% else %}Noch nie{% endif %}
+            </div>
+            <div class="stat-meta">Intervall: {{ config.scan_interval or 15 }} min</div>
         </div>
     </div>
 </div>
 
-<!-- Status Cards -->
-<div class="row">
-    <div class="col-md-3 col-sm-6">
-        <div class="card mb-4">
-            <div class="card-body stat-card">
-                <h6 class="text-muted"><i class="bi bi-reddit"></i> Reddit</h6>
-                <div class="stat-number" id="reddit-status">
-                    {% if config.reddit_username %}
-                    <span class="status-active">Aktiv</span>
-                    {% else %}
-                    <span class="status-inactive">Inaktiv</span>
-                    {% endif %}
-                </div>
-                <small class="text-muted">{{ config.reddit_username or 'Nicht konfiguriert' }}</small>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-3 col-sm-6">
-        <div class="card mb-4">
-            <div class="card-body stat-card">
-                <h6 class="text-muted"><i class="bi bi-slack"></i> Slack</h6>
-                <div class="stat-number" id="slack-status">
-                    {% if config.slack_webhook %}
-                    <span class="status-active">Aktiv</span>
-                    {% else %}
-                    <span class="status-inactive">Inaktiv</span>
-                    {% endif %}
-                </div>
-                <small class="text-muted">{{ config.slack_channel or 'Nicht konfiguriert' }}</small>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-3 col-sm-6">
-        <div class="card mb-4">
-            <div class="card-body stat-card">
-                <h6 class="text-muted"><i class="bi bi-collection"></i> Subreddits</h6>
-                <div class="stat-number" id="subreddit-count">
-                    {{ (config.subreddits or '').split('\n')|select|list|length }}
-                </div>
-                <small class="text-muted">konfiguriert</small>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-3 col-sm-6">
-        <div class="card mb-4">
-            <div class="card-body stat-card">
-                <h6 class="text-muted"><i class="bi bi-clock-history"></i> Letzter Scan</h6>
-                <div id="last-scan-time" style="font-size: 1.2rem; color: var(--reddit-orange);">
-                    {% if config.last_scan %}
-                    {{ config.last_scan[:16] }}
-                    {% else %}
-                    Noch nie
-                    {% endif %}
-                </div>
-                <small class="text-muted">Interval: {{ config.scan_interval or 15 }} min</small>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Quick Setup -->
+<!-- Setup Warning -->
 {% if not config.reddit_username or not config.slack_webhook %}
-<div class="row">
-    <div class="col-12">
-        <div class="alert alert-warning">
-            <h5><i class="bi bi-exclamation-triangle"></i> Setup erforderlich</h5>
-            <p class="mb-2">Folgende Einstellungen fehlen noch:</p>
-            <ul class="mb-0">
-                {% if not config.reddit_username %}
-                <li><a href="/settings/reddit" class="alert-link">Reddit-Account konfigurieren</a></li>
-                {% endif %}
-                {% if not config.slack_webhook %}
-                <li><a href="/settings/slack" class="alert-link">Slack-Webhook einrichten</a></li>
-                {% endif %}
-            </ul>
+<div class="alert alert-warning fade-in-up mb-4">
+    <i class="bi bi-exclamation-triangle"></i>
+    <div>
+        <strong>Setup erforderlich</strong>
+        <div class="mt-1" style="font-size: 0.9rem; opacity: 0.9;">
+            {% if not config.reddit_username %}
+            <a href="/settings/reddit" style="color: inherit; text-decoration: underline;">Reddit-Account konfigurieren</a>
+            {% endif %}
+            {% if not config.reddit_username and not config.slack_webhook %} | {% endif %}
+            {% if not config.slack_webhook %}
+            <a href="/settings/slack" style="color: inherit; text-decoration: underline;">Slack-Webhook einrichten</a>
+            {% endif %}
         </div>
     </div>
 </div>
 {% endif %}
 
-<!-- Actions -->
-<div class="row">
-    <div class="col-md-8">
-        <div class="card mb-4">
-            <div class="card-header">
-                <i class="bi bi-lightning"></i> Aktionen
+<!-- Main Content Grid -->
+<div class="grid grid-3 mb-4" style="grid-template-columns: 2fr 1fr;">
+    <!-- Actions Card -->
+    <div class="card fade-in-up stagger-1">
+        <div class="card-header">
+            <i class="bi bi-lightning-charge"></i>
+            <span>Quick Actions</span>
+        </div>
+        <div class="card-body">
+            <div class="flex flex-wrap gap-2">
+                <button id="btn-scan-now" class="btn btn-primary" {% if not config.reddit_username %}disabled{% endif %}>
+                    <i class="bi bi-search"></i>
+                    <span>Jetzt scannen</span>
+                </button>
+                <button id="btn-test-slack" class="btn btn-slack" {% if not config.slack_webhook %}disabled{% endif %}>
+                    <i class="bi bi-send"></i>
+                    <span>Slack testen</span>
+                </button>
+                <a href="/settings/reddit" class="btn btn-secondary">
+                    <i class="bi bi-gear"></i>
+                    <span>Reddit</span>
+                </a>
+                <a href="/settings/guardrails" class="btn btn-secondary">
+                    <i class="bi bi-shield-check"></i>
+                    <span>Guardrails</span>
+                </a>
             </div>
-            <div class="card-body">
-                <div class="d-flex flex-wrap gap-2">
-                    <button id="btn-scan-now" class="btn btn-primary" {% if not config.reddit_username %}disabled{% endif %}>
-                        <i class="bi bi-search"></i> Jetzt scannen
-                    </button>
-                    <button id="btn-test-slack" class="btn btn-slack" {% if not config.slack_webhook %}disabled{% endif %}>
-                        <i class="bi bi-send"></i> Slack testen
-                    </button>
-                    <a href="/settings/reddit" class="btn btn-outline-light">
-                        <i class="bi bi-gear"></i> Reddit Settings
-                    </a>
-                    <a href="/settings/guardrails" class="btn btn-outline-light">
-                        <i class="bi bi-shield"></i> Guardrails
-                    </a>
+
+            <!-- Terminal-Style Status -->
+            <div class="terminal mt-3">
+                <div class="terminal-line">
+                    <span class="terminal-prompt">$</span>
+                    <span class="terminal-command"> monitor --status</span>
+                </div>
+                <div class="terminal-line" style="color: var(--text-muted);">
+                    <span id="terminal-status">{% if config.monitor_running %}[RUNNING]{% else %}[STOPPED]{% endif %}</span>
+                    subreddits={{ (config.subreddits or '').split('\n')|select|list|length }}
+                    interval={{ config.scan_interval or 15 }}m
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="col-md-4">
-        <div class="card mb-4">
-            <div class="card-header">
-                <i class="bi bi-clock"></i> Monitor Status
+    <!-- Status Card -->
+    <div class="card fade-in-up stagger-2">
+        <div class="card-header">
+            <i class="bi bi-activity"></i>
+            <span>Monitor Status</span>
+        </div>
+        <div class="card-body">
+            <div class="flex justify-between items-center mb-3">
+                <span class="text-muted">Status</span>
+                <span id="monitor-status" class="badge {% if config.monitor_running %}badge-success{% else %}badge-secondary{% endif %}">
+                    {% if config.monitor_running %}Running{% else %}Stopped{% endif %}
+                </span>
             </div>
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span>Status:</span>
-                    <span id="monitor-status" class="badge {% if config.monitor_running %}bg-success{% else %}bg-secondary{% endif %}">
-                        {% if config.monitor_running %}Laeuft{% else %}Gestoppt{% endif %}
-                    </span>
-                </div>
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span>Aktiv:</span>
-                    <span class="text-info">{{ config.active_start or '09:00' }} - {{ config.active_end or '17:00' }}</span>
-                </div>
-                <div class="d-flex justify-content-between align-items-center">
-                    <span>Naechster Scan:</span>
-                    <span id="next-scan" class="text-muted">-</span>
-                </div>
+            <div class="flex justify-between items-center mb-3">
+                <span class="text-muted">Aktive Zeit</span>
+                <span style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem;">
+                    {{ config.active_start or '09:00' }} - {{ config.active_end or '17:00' }}
+                </span>
+            </div>
+            <div class="flex justify-between items-center mb-3">
+                <span class="text-muted">Min. Upvotes</span>
+                <span style="color: var(--accent); font-family: var(--font-mono);">
+                    {{ config.min_upvotes or 5 }}
+                </span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="text-muted">Keywords</span>
+                <span class="badge badge-accent">
+                    {{ (config.keywords or '').split('\n')|select|list|length }}
+                </span>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Recent Posts -->
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-newspaper"></i> Gefundene Posts</span>
-                <span id="posts-count" class="badge bg-secondary">0</span>
-            </div>
-            <div class="card-body">
-                <div id="posts-container">
-                    <p class="text-muted text-center py-4">
-                        <i class="bi bi-inbox" style="font-size: 2rem;"></i><br>
-                        Noch keine Posts gefunden. Klicke auf "Jetzt scannen" um zu starten.
-                    </p>
-                </div>
+<!-- Posts Section -->
+<div class="card fade-in-up stagger-3">
+    <div class="card-header flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <i class="bi bi-newspaper"></i>
+            <span>Gefundene Posts</span>
+        </div>
+        <span id="posts-count" class="badge badge-secondary">0</span>
+    </div>
+    <div class="card-body">
+        <div id="posts-container">
+            <div class="text-center" style="padding: 3rem 1rem;">
+                <i class="bi bi-inbox" style="font-size: 3rem; color: var(--text-muted); opacity: 0.5;"></i>
+                <p class="mt-2 text-muted">Noch keine Posts gefunden</p>
+                <p style="font-size: 0.85rem; color: var(--text-muted);">Klicke auf "Jetzt scannen" um zu starten</p>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .post-item {
+        display: block;
+        padding: 1rem;
+        border-bottom: 1px solid var(--border-color);
+        text-decoration: none;
+        color: var(--text-primary);
+        transition: all 0.2s ease;
+    }
+
+    .post-item:last-child {
+        border-bottom: none;
+    }
+
+    .post-item:hover {
+        background: var(--bg-card-hover);
+    }
+
+    .post-title {
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: 0.95rem;
+        margin-bottom: 0.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .post-upvotes {
+        color: var(--accent);
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }
+
+    .post-content {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-bottom: 0.5rem;
+        line-height: 1.5;
+    }
+
+    .post-meta {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .post-subreddit {
+        color: var(--accent);
+    }
+
+    .post-keywords {
+        margin-top: 0.5rem;
+        font-size: 0.75rem;
+        color: var(--success);
+    }
+</style>
 {% endblock %}
 
 {% block extra_js %}
@@ -182,7 +261,7 @@ const csrfToken = '{{ csrf_token() }}';
 // Scan button
 document.getElementById('btn-scan-now').addEventListener('click', async function() {
     this.disabled = true;
-    this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Scanne...';
+    this.innerHTML = '<div class="spinner"></div><span>Scanne...</span>';
 
     try {
         const response = await fetch('/api/scan', {
@@ -200,29 +279,33 @@ document.getElementById('btn-scan-now').addEventListener('click', async function
             document.getElementById('last-scan-time').textContent = new Date().toLocaleString('de-DE');
 
             if (data.posts && data.posts.length > 0) {
-                let html = '<div class="list-group list-group-flush">';
+                let html = '';
                 data.posts.forEach(post => {
                     html += `
-                    <a href="${post.url}" target="_blank" class="list-group-item list-group-item-action bg-transparent text-white border-0 border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1">${post.title}</h6>
-                            <small class="text-warning">${post.upvotes} <i class="bi bi-arrow-up"></i></small>
+                    <a href="${post.url}" target="_blank" class="post-item">
+                        <div class="post-title">
+                            <span>${post.title}</span>
+                            <span class="post-upvotes"><i class="bi bi-arrow-up"></i> ${post.upvotes}</span>
                         </div>
-                        <p class="mb-1 text-muted small">${post.content.substring(0, 150)}...</p>
-                        <small class="text-info">r/${post.subreddit} &bull; u/${post.author}</small>
+                        <div class="post-content">${post.content.substring(0, 180)}...</div>
+                        <div class="post-meta">
+                            <span class="post-subreddit">r/${post.subreddit}</span>
+                            <span>•</span>
+                            <span>u/${post.author}</span>
+                        </div>
                         ${post.matched_keywords && post.matched_keywords.length > 0 ?
-                          `<br><small class="text-success"><i class="bi bi-check-circle"></i> Keywords: ${post.matched_keywords.join(', ')}</small>` : ''}
+                          `<div class="post-keywords"><i class="bi bi-check-circle"></i> ${post.matched_keywords.join(', ')}</div>` : ''}
                     </a>
                     `;
                 });
-                html += '</div>';
                 document.getElementById('posts-container').innerHTML = html;
             } else {
                 document.getElementById('posts-container').innerHTML = `
-                    <p class="text-muted text-center py-4">
-                        <i class="bi bi-check-circle text-success" style="font-size: 2rem;"></i><br>
-                        Scan abgeschlossen. Keine neuen Posts gefunden, die den Guardrails entsprechen.
-                    </p>
+                    <div class="text-center" style="padding: 3rem 1rem;">
+                        <i class="bi bi-check-circle" style="font-size: 3rem; color: var(--success);"></i>
+                        <p class="mt-2" style="color: var(--success);">Scan abgeschlossen</p>
+                        <p style="font-size: 0.85rem; color: var(--text-muted);">Keine neuen Posts gefunden, die den Guardrails entsprechen</p>
+                    </div>
                 `;
             }
         } else {
@@ -232,14 +315,14 @@ document.getElementById('btn-scan-now').addEventListener('click', async function
         alert('Fehler: ' + error.message);
     } finally {
         this.disabled = false;
-        this.innerHTML = '<i class="bi bi-search"></i> Jetzt scannen';
+        this.innerHTML = '<i class="bi bi-search"></i><span>Jetzt scannen</span>';
     }
 });
 
-// Test Slack button
+// Test Slack
 document.getElementById('btn-test-slack').addEventListener('click', async function() {
     this.disabled = true;
-    this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sende...';
+    this.innerHTML = '<div class="spinner"></div><span>Sende...</span>';
 
     try {
         const response = await fetch('/api/slack/test', {
@@ -251,49 +334,44 @@ document.getElementById('btn-test-slack').addEventListener('click', async functi
         });
 
         const data = await response.json();
-
-        if (data.success) {
-            alert('Test-Nachricht erfolgreich gesendet!');
-        } else {
-            alert('Fehler: ' + data.error);
-        }
+        alert(data.success ? 'Test-Nachricht gesendet!' : 'Fehler: ' + data.error);
     } catch (error) {
         alert('Fehler: ' + error.message);
     } finally {
         this.disabled = false;
-        this.innerHTML = '<i class="bi bi-send"></i> Slack testen';
+        this.innerHTML = '<i class="bi bi-send"></i><span>Slack testen</span>';
     }
 });
 
-// Start/Stop Monitor button
+// Start/Stop Monitor
 document.getElementById('btn-start-stop').addEventListener('click', async function() {
     const isRunning = this.classList.contains('btn-danger');
     const endpoint = isRunning ? '/api/monitor/stop' : '/api/monitor/start';
 
     this.disabled = true;
+    this.innerHTML = '<div class="spinner"></div><span>...</span>';
 
     try {
         const response = await fetch(endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken
-            }
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }
         });
 
         const data = await response.json();
 
         if (data.success) {
             if (data.status === 'running') {
-                this.className = 'btn btn-lg btn-danger';
-                this.innerHTML = '<i class="bi bi-stop-circle"></i> Monitor stoppen';
-                document.getElementById('monitor-status').className = 'badge bg-success';
-                document.getElementById('monitor-status').textContent = 'Laeuft';
+                this.className = 'btn btn-danger btn-lg';
+                this.innerHTML = '<i class="bi bi-stop-circle"></i><span>Stoppen</span>';
+                document.getElementById('monitor-status').className = 'badge badge-success';
+                document.getElementById('monitor-status').textContent = 'Running';
+                document.getElementById('terminal-status').textContent = '[RUNNING]';
             } else {
-                this.className = 'btn btn-lg btn-success';
-                this.innerHTML = '<i class="bi bi-play-circle"></i> Monitor starten';
-                document.getElementById('monitor-status').className = 'badge bg-secondary';
-                document.getElementById('monitor-status').textContent = 'Gestoppt';
+                this.className = 'btn btn-success btn-lg';
+                this.innerHTML = '<i class="bi bi-play-circle"></i><span>Starten</span>';
+                document.getElementById('monitor-status').className = 'badge badge-secondary';
+                document.getElementById('monitor-status').textContent = 'Stopped';
+                document.getElementById('terminal-status').textContent = '[STOPPED]';
             }
         }
     } catch (error) {
@@ -302,18 +380,5 @@ document.getElementById('btn-start-stop').addEventListener('click', async functi
         this.disabled = false;
     }
 });
-
-// Load status on page load
-async function loadStatus() {
-    try {
-        const response = await fetch('/api/status');
-        const data = await response.json();
-        // Update UI with status
-    } catch (error) {
-        console.error('Error loading status:', error);
-    }
-}
-
-document.addEventListener('DOMContentLoaded', loadStatus);
 </script>
 {% endblock %}

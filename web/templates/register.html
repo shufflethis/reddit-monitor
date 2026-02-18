@@ -2,56 +2,178 @@
 
 {% block title %}Registrieren - Reddit Monitor{% endblock %}
 
+{% block extra_css %}
+<style>
+    .login-container {
+        min-height: calc(100vh - 100px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+    }
+
+    .login-card {
+        width: 100%;
+        max-width: 420px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-xl);
+        overflow: hidden;
+        animation: slideUp 0.6s ease;
+    }
+
+    @keyframes slideUp {
+        from { opacity: 0; transform: translateY(30px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .login-header {
+        padding: 2.5rem 2rem 1.5rem;
+        text-align: center;
+        background: linear-gradient(180deg, var(--success-glow) 0%, transparent 100%);
+    }
+
+    .login-logo {
+        width: 72px;
+        height: 72px;
+        background: linear-gradient(135deg, var(--success), #059669);
+        border-radius: var(--radius-lg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 2rem;
+        color: white;
+        box-shadow: 0 8px 32px var(--success-glow);
+    }
+
+    .login-title {
+        font-family: var(--font-display);
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+
+    .login-subtitle {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+    }
+
+    .login-body { padding: 2rem; }
+
+    .login-form .form-group { margin-bottom: 1.25rem; }
+
+    .login-form .form-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+    }
+
+    .login-form .form-control {
+        padding: 1rem 1.25rem;
+        font-size: 1rem;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        transition: all 0.2s ease;
+    }
+
+    .login-form .form-control:focus {
+        border-color: var(--success);
+        box-shadow: 0 0 0 4px var(--success-glow);
+    }
+
+    .login-btn {
+        width: 100%;
+        padding: 1rem;
+        font-size: 1rem;
+        font-weight: 600;
+        background: linear-gradient(135deg, var(--success), #059669);
+        color: white;
+        border: none;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .login-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px var(--success-glow);
+    }
+
+    .login-footer {
+        padding: 1.5rem 2rem;
+        text-align: center;
+        border-top: 1px solid var(--border-color);
+        background: var(--bg-secondary);
+    }
+
+    .login-footer a {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 500;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="row justify-content-center mt-5">
-    <div class="col-md-5">
-        <div class="card">
-            <div class="card-header text-center">
-                <h4><i class="bi bi-person-plus"></i> Account erstellen</h4>
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-header">
+            <div class="login-logo">
+                <i class="bi bi-person-plus"></i>
             </div>
-            <div class="card-body p-4">
-                <form method="POST" action="/register">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <h1 class="login-title">Account erstellen</h1>
+            <p class="login-subtitle">Registriere dich um loszulegen</p>
+        </div>
 
-                    <div class="mb-3">
-                        <label for="username" class="form-label">
-                            <i class="bi bi-person"></i> Username
-                        </label>
-                        <input type="text" class="form-control" id="username" name="username"
-                               placeholder="Waehle einen Username" required autofocus>
-                    </div>
+        <div class="login-body">
+            <form method="POST" action="/register" class="login-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-                    <div class="mb-3">
-                        <label for="password" class="form-label">
-                            <i class="bi bi-key"></i> Password
-                        </label>
-                        <input type="password" class="form-control" id="password" name="password"
-                               placeholder="Waehle ein sicheres Passwort" required>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="password2" class="form-label">
-                            <i class="bi bi-key-fill"></i> Password wiederholen
-                        </label>
-                        <input type="password" class="form-control" id="password2" name="password2"
-                               placeholder="Passwort bestaetigen" required>
-                    </div>
-
-                    <div class="d-grid gap-2 mt-4">
-                        <button type="submit" class="btn btn-primary btn-lg">
-                            <i class="bi bi-person-plus"></i> Registrieren
-                        </button>
-                    </div>
-                </form>
-
-                <hr class="my-4" style="border-color: rgba(255,255,255,0.2);">
-
-                <div class="text-center">
-                    <small class="text-muted">
-                        Schon einen Account? <a href="/login" class="text-warning">Jetzt einloggen</a>
-                    </small>
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="bi bi-person"></i>
+                        Username
+                    </label>
+                    <input type="text" class="form-control" name="username"
+                           placeholder="Waehle einen Username" required autofocus>
                 </div>
-            </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="bi bi-key"></i>
+                        Password
+                    </label>
+                    <input type="password" class="form-control" name="password"
+                           placeholder="Sicheres Passwort" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        <i class="bi bi-key-fill"></i>
+                        Password bestaetigen
+                    </label>
+                    <input type="password" class="form-control" name="password2"
+                           placeholder="Passwort wiederholen" required>
+                </div>
+
+                <button type="submit" class="login-btn">
+                    <i class="bi bi-person-plus"></i>
+                    Registrieren
+                </button>
+            </form>
+        </div>
+
+        <div class="login-footer">
+            <span style="color: var(--text-muted);">Schon einen Account? </span>
+            <a href="/login">Jetzt einloggen</a>
         </div>
     </div>
 </div>

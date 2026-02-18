@@ -3,132 +3,121 @@
 {% block title %}Reddit Settings - Reddit Monitor{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-12">
-        <h2><i class="bi bi-reddit"></i> Reddit Einstellungen</h2>
-        <p class="text-muted">Konfiguriere deinen Reddit-Account und Subreddits</p>
-    </div>
+<div class="page-header fade-in-up">
+    <h1 class="page-title"><i class="bi bi-reddit"></i> Reddit Einstellungen</h1>
+    <p class="page-subtitle">Konfiguriere deinen Reddit-Account und Subreddits</p>
 </div>
 
 <form method="POST" action="/settings/reddit">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-    <div class="row">
+    <div class="grid grid-2 mb-4">
         <!-- Reddit Account -->
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-person-badge"></i> Reddit Account
+        <div class="card fade-in-up stagger-1">
+            <div class="card-header">
+                <i class="bi bi-person-badge"></i>
+                <span>Reddit Account</span>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Reddit Username</label>
+                    <input type="text" class="form-control" name="reddit_username"
+                           value="{{ config.reddit_username or '' }}" placeholder="DeinUsername">
+                    <div class="form-text">Dein Reddit-Benutzername (ohne u/)</div>
                 </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label for="reddit_username" class="form-label">Reddit Username</label>
-                        <input type="text" class="form-control" id="reddit_username" name="reddit_username"
-                               value="{{ config.reddit_username or '' }}" placeholder="u/DeinUsername">
-                        <div class="form-text">Dein Reddit-Benutzername (ohne u/)</div>
-                    </div>
 
-                    <div class="mb-3">
-                        <label for="reddit_password" class="form-label">Reddit Password</label>
-                        <input type="password" class="form-control" id="reddit_password" name="reddit_password"
-                               placeholder="{% if config.reddit_password %}********{% else %}Passwort eingeben{% endif %}">
-                        <div class="form-text">Leer lassen um bestehendes Passwort zu behalten</div>
-                    </div>
+                <div class="form-group">
+                    <label class="form-label">Reddit Password</label>
+                    <input type="password" class="form-control" name="reddit_password"
+                           placeholder="{% if config.reddit_password %}••••••••{% else %}Passwort eingeben{% endif %}">
+                    <div class="form-text">Leer lassen um bestehendes Passwort zu behalten</div>
                 </div>
             </div>
         </div>
 
         <!-- Subreddits -->
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-collection"></i> Subreddits
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label for="subreddits" class="form-label">Zu ueberwachende Subreddits</label>
-                        <textarea class="form-control" id="subreddits" name="subreddits" rows="6"
-                                  placeholder="python&#10;programming&#10;learnprogramming">{{ config.subreddits or '' }}</textarea>
-                        <div class="form-text">Ein Subreddit pro Zeile (ohne r/)</div>
-                    </div>
+        <div class="card fade-in-up stagger-2">
+            <div class="card-header">
+                <i class="bi bi-collection"></i>
+                <span>Subreddits</span>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Zu ueberwachende Subreddits</label>
+                    <textarea class="form-control" name="subreddits" rows="6"
+                              placeholder="python&#10;programming&#10;learnprogramming">{{ config.subreddits or '' }}</textarea>
+                    <div class="form-text">Ein Subreddit pro Zeile (ohne r/)</div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row">
+    <div class="grid grid-2 mb-4">
         <!-- Scan Settings -->
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-clock-history"></i> Scan Einstellungen
+        <div class="card fade-in-up stagger-3">
+            <div class="card-header">
+                <i class="bi bi-clock-history"></i>
+                <span>Scan Einstellungen</span>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Scan Interval (Minuten)</label>
+                    <input type="number" class="form-control" name="scan_interval"
+                           value="{{ config.scan_interval or 15 }}" min="5" max="60">
                 </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label for="scan_interval" class="form-label">Scan Interval (Minuten)</label>
-                        <input type="number" class="form-control" id="scan_interval" name="scan_interval"
-                               value="{{ config.scan_interval or 15 }}" min="5" max="60">
-                        <div class="form-text">Wie oft nach neuen Posts gesucht wird</div>
-                    </div>
 
-                    <div class="row">
-                        <div class="col-6">
-                            <div class="mb-3">
-                                <label for="active_start" class="form-label">Aktiv von</label>
-                                <input type="time" class="form-control" id="active_start" name="active_start"
-                                       value="{{ config.active_start or '09:00' }}">
-                            </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="mb-3">
-                                <label for="active_end" class="form-label">Aktiv bis</label>
-                                <input type="time" class="form-control" id="active_end" name="active_end"
-                                       value="{{ config.active_end or '17:00' }}">
-                            </div>
-                        </div>
+                <div class="grid grid-2">
+                    <div class="form-group">
+                        <label class="form-label">Aktiv von</label>
+                        <input type="time" class="form-control" name="active_start"
+                               value="{{ config.active_start or '09:00' }}">
                     </div>
-                    <div class="form-text">Zeitraum in dem gescannt wird (z.B. 9-17 Uhr)</div>
+                    <div class="form-group">
+                        <label class="form-label">Aktiv bis</label>
+                        <input type="time" class="form-control" name="active_end"
+                               value="{{ config.active_end or '17:00' }}">
+                    </div>
                 </div>
+                <div class="form-text">Zeitraum in dem gescannt wird</div>
             </div>
         </div>
 
         <!-- Status -->
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-activity"></i> Status
+        <div class="card fade-in-up stagger-4">
+            <div class="card-header">
+                <i class="bi bi-activity"></i>
+                <span>Status</span>
+            </div>
+            <div class="card-body">
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-muted">Verbindung</span>
+                    <span class="badge {% if config.reddit_username %}badge-success{% else %}badge-secondary{% endif %}">
+                        {% if config.reddit_username %}Konfiguriert{% else %}Nicht konfiguriert{% endif %}
+                    </span>
                 </div>
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <span>Verbindung:</span>
-                        <span class="badge {% if config.reddit_username %}bg-success{% else %}bg-secondary{% endif %}">
-                            {% if config.reddit_username %}Konfiguriert{% else %}Nicht konfiguriert{% endif %}
-                        </span>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <span>Subreddits:</span>
-                        <span class="badge bg-info">{{ (config.subreddits or '').split('\n')|select|list|length }}</span>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span>Letzter Scan:</span>
-                        <span class="text-muted">{{ config.last_scan or 'Noch nie' }}</span>
-                    </div>
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-muted">Subreddits</span>
+                    <span class="badge badge-accent">{{ (config.subreddits or '').split('\n')|select|list|length }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-muted">Letzter Scan</span>
+                    <span style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary);">
+                        {{ config.last_scan[:16] if config.last_scan else 'Noch nie' }}
+                    </span>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row">
-        <div class="col-12">
-            <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary btn-lg">
-                    <i class="bi bi-check-lg"></i> Einstellungen speichern
-                </button>
-                <a href="/" class="btn btn-outline-secondary btn-lg">
-                    <i class="bi bi-arrow-left"></i> Zurueck
-                </a>
-            </div>
-        </div>
+    <div class="flex gap-2 fade-in-up stagger-5">
+        <button type="submit" class="btn btn-primary btn-lg">
+            <i class="bi bi-check-lg"></i>
+            Speichern
+        </button>
+        <a href="/" class="btn btn-secondary btn-lg">
+            <i class="bi bi-arrow-left"></i>
+            Zurueck
+        </a>
     </div>
 </form>
 {% endblock %}

@@ -3,133 +3,118 @@
 {% block title %}Slack Settings - Reddit Monitor{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-12">
-        <h2><i class="bi bi-slack"></i> Slack Einstellungen</h2>
-        <p class="text-muted">Konfiguriere Slack-Benachrichtigungen</p>
-    </div>
+<div class="page-header fade-in-up">
+    <h1 class="page-title"><i class="bi bi-slack"></i> Slack Einstellungen</h1>
+    <p class="page-subtitle">Konfiguriere Slack-Benachrichtigungen</p>
 </div>
 
 <form method="POST" action="/settings/slack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-    <div class="row">
+    <div class="grid grid-2 mb-4" style="grid-template-columns: 2fr 1fr;">
         <!-- Webhook Configuration -->
-        <div class="col-md-8">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-link-45deg"></i> Webhook Konfiguration
+        <div class="card fade-in-up stagger-1">
+            <div class="card-header">
+                <i class="bi bi-link-45deg"></i>
+                <span>Webhook Konfiguration</span>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Slack Webhook URL</label>
+                    <input type="url" class="form-control" name="webhook_url"
+                           value="{{ config.slack_webhook or '' }}"
+                           placeholder="Deine Slack Webhook URL">
+                    <div class="form-text">
+                        <a href="https://api.slack.com/messaging/webhooks" target="_blank" style="color: var(--accent);">
+                            Anleitung zum Erstellen
+                        </a>
+                    </div>
                 </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label for="webhook_url" class="form-label">Slack Webhook URL</label>
-                        <input type="url" class="form-control" id="webhook_url" name="webhook_url"
-                               value="{{ config.slack_webhook or '' }}"
-                               placeholder="Deine Slack Webhook URL hier einfuegen">
-                        <div class="form-text">
-                            Webhook URL von Slack.
-                            <a href="https://api.slack.com/messaging/webhooks" target="_blank" class="text-warning">
-                                Anleitung zum Erstellen
-                            </a>
-                        </div>
-                    </div>
 
-                    <div class="mb-3">
-                        <label for="slack_channel" class="form-label">Channel</label>
-                        <input type="text" class="form-control" id="slack_channel" name="slack_channel"
-                               value="{{ config.slack_channel or '#general' }}" placeholder="#general">
-                        <div class="form-text">Slack-Channel fuer Benachrichtigungen</div>
-                    </div>
+                <div class="form-group">
+                    <label class="form-label">Channel</label>
+                    <input type="text" class="form-control" name="slack_channel"
+                           value="{{ config.slack_channel or '#general' }}" placeholder="#general">
+                </div>
 
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="bot_username" class="form-label">Bot Username</label>
-                                <input type="text" class="form-control" id="bot_username" name="bot_username"
-                                       value="{{ config.bot_username or 'Reddit Monitor' }}" placeholder="Reddit Monitor">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="bot_emoji" class="form-label">Bot Emoji</label>
-                                <input type="text" class="form-control" id="bot_emoji" name="bot_emoji"
-                                       value="{{ config.bot_emoji or ':robot_face:' }}" placeholder=":robot_face:">
-                            </div>
-                        </div>
+                <div class="grid grid-2">
+                    <div class="form-group">
+                        <label class="form-label">Bot Username</label>
+                        <input type="text" class="form-control" name="bot_username"
+                               value="{{ config.bot_username or 'Reddit Monitor' }}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Bot Emoji</label>
+                        <input type="text" class="form-control" name="bot_emoji"
+                               value="{{ config.bot_emoji or ':robot_face:' }}">
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- Status & Test -->
-        <div class="col-md-4">
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-activity"></i> Status
-                </div>
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <span>Webhook:</span>
-                        <span class="badge {% if config.slack_webhook %}bg-success{% else %}bg-secondary{% endif %}">
-                            {% if config.slack_webhook %}Konfiguriert{% else %}Nicht konfiguriert{% endif %}
-                        </span>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <span>Channel:</span>
-                        <span class="text-info">{{ config.slack_channel or '-' }}</span>
-                    </div>
-
-                    <hr style="border-color: rgba(255,255,255,0.2);">
-
-                    <button type="button" id="btn-test-slack" class="btn btn-slack w-100" {% if not config.slack_webhook %}disabled{% endif %}>
-                        <i class="bi bi-send"></i> Test-Nachricht senden
-                    </button>
-                    <div id="test-result" class="mt-2"></div>
-                </div>
+        <div class="card fade-in-up stagger-2">
+            <div class="card-header">
+                <i class="bi bi-activity"></i>
+                <span>Status</span>
             </div>
-
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="bi bi-bell"></i> Benachrichtigungstypen
+            <div class="card-body">
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-muted">Webhook</span>
+                    <span class="badge {% if config.slack_webhook %}badge-success{% else %}badge-secondary{% endif %}">
+                        {% if config.slack_webhook %}Konfiguriert{% else %}Nicht konfiguriert{% endif %}
+                    </span>
                 </div>
-                <div class="card-body">
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" id="notify_new_posts" name="notify_new_posts"
-                               {% if config.notify_new_posts != False %}checked{% endif %}>
-                        <label class="form-check-label" for="notify_new_posts">
-                            Neue Posts
-                        </label>
-                    </div>
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" id="notify_keywords" name="notify_keywords"
-                               {% if config.notify_keywords != False %}checked{% endif %}>
-                        <label class="form-check-label" for="notify_keywords">
-                            Keyword-Matches
-                        </label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="notify_errors" name="notify_errors"
-                               {% if config.notify_errors %}checked{% endif %}>
-                        <label class="form-check-label" for="notify_errors">
-                            Fehler & Warnungen
-                        </label>
-                    </div>
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-muted">Channel</span>
+                    <span style="color: var(--accent);">{{ config.slack_channel or '-' }}</span>
+                </div>
+
+                <button type="button" id="btn-test-slack" class="btn btn-slack w-full" {% if not config.slack_webhook %}disabled{% endif %}>
+                    <i class="bi bi-send"></i>
+                    Test senden
+                </button>
+                <div id="test-result" class="mt-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Types -->
+    <div class="card fade-in-up stagger-3 mb-4">
+        <div class="card-header">
+            <i class="bi bi-bell"></i>
+            <span>Benachrichtigungstypen</span>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="notify_new_posts" name="notify_new_posts"
+                           {% if config.notify_new_posts != False %}checked{% endif %}>
+                    <label class="form-check-label" for="notify_new_posts">Neue Posts</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="notify_keywords" name="notify_keywords"
+                           {% if config.notify_keywords != False %}checked{% endif %}>
+                    <label class="form-check-label" for="notify_keywords">Keyword-Matches</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="notify_errors" name="notify_errors"
+                           {% if config.notify_errors %}checked{% endif %}>
+                    <label class="form-check-label" for="notify_errors">Fehler & Warnungen</label>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row">
-        <div class="col-12">
-            <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary btn-lg">
-                    <i class="bi bi-check-lg"></i> Einstellungen speichern
-                </button>
-                <a href="/" class="btn btn-outline-secondary btn-lg">
-                    <i class="bi bi-arrow-left"></i> Zurueck
-                </a>
-            </div>
-        </div>
+    <div class="flex gap-2 fade-in-up stagger-4">
+        <button type="submit" class="btn btn-primary btn-lg">
+            <i class="bi bi-check-lg"></i>
+            Speichern
+        </button>
+        <a href="/" class="btn btn-secondary btn-lg">
+            <i class="bi bi-arrow-left"></i>
+            Zurueck
+        </a>
     </div>
 </form>
 {% endblock %}
@@ -138,31 +123,22 @@
 <script>
 document.getElementById('btn-test-slack').addEventListener('click', async function() {
     this.disabled = true;
-    this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sende...';
-
-    const resultDiv = document.getElementById('test-result');
+    this.innerHTML = '<div class="spinner"></div> Sende...';
 
     try {
         const response = await fetch('/api/slack/test', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token() }}'
-            }
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }
         });
-
         const data = await response.json();
-
-        if (data.success) {
-            resultDiv.innerHTML = '<div class="alert alert-success py-2 small">Test erfolgreich!</div>';
-        } else {
-            resultDiv.innerHTML = '<div class="alert alert-danger py-2 small">Fehler: ' + data.error + '</div>';
-        }
+        document.getElementById('test-result').innerHTML = data.success
+            ? '<div class="alert alert-success" style="padding: 0.5rem; margin: 0;">Test erfolgreich!</div>'
+            : '<div class="alert alert-danger" style="padding: 0.5rem; margin: 0;">' + data.error + '</div>';
     } catch (error) {
-        resultDiv.innerHTML = '<div class="alert alert-danger py-2 small">Fehler: ' + error.message + '</div>';
+        document.getElementById('test-result').innerHTML = '<div class="alert alert-danger" style="padding: 0.5rem; margin: 0;">' + error.message + '</div>';
     } finally {
         this.disabled = false;
-        this.innerHTML = '<i class="bi bi-send"></i> Test-Nachricht senden';
+        this.innerHTML = '<i class="bi bi-send"></i> Test senden';
     }
 });
 </script>
