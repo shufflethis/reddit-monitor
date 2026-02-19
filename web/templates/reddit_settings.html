@@ -32,6 +32,25 @@
                            placeholder="{% if config.reddit_password %}••••••••{% else %}Passwort eingeben{% endif %}">
                     <div class="form-text">Leer lassen um bestehendes Passwort zu behalten</div>
                 </div>
+
+                <hr style="border-color: var(--border); margin: 1.5rem 0;">
+
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-muted">Verbindung</span>
+                    <span class="badge {% if config.reddit_username %}badge-success{% else %}badge-secondary{% endif %}">
+                        {% if config.reddit_username %}{{ config.reddit_username }}{% else %}Nicht konfiguriert{% endif %}
+                    </span>
+                </div>
+
+                <button type="button" id="btn-test-reddit" class="btn btn-primary w-full"
+                        {% if not config.reddit_username or not config.reddit_password %}disabled{% endif %}>
+                    <i class="bi bi-lightning"></i>
+                    Login testen
+                </button>
+                <div id="test-result" class="mt-2"></div>
+                <div class="form-text mt-2">
+                    Stealth-Browser Login mit AI Captcha-Solver. Beim ersten Mal kann es 15-30 Sekunden dauern.
+                </div>
             </div>
         </div>
 
@@ -90,19 +109,19 @@
             </div>
             <div class="card-body">
                 <div class="flex justify-between items-center mb-3">
-                    <span class="text-muted">Verbindung</span>
-                    <span class="badge {% if config.reddit_username %}badge-success{% else %}badge-secondary{% endif %}">
-                        {% if config.reddit_username %}Konfiguriert{% else %}Nicht konfiguriert{% endif %}
-                    </span>
-                </div>
-                <div class="flex justify-between items-center mb-3">
                     <span class="text-muted">Subreddits</span>
                     <span class="badge badge-accent">{{ (config.subreddits or '').split('\n')|select|list|length }}</span>
                 </div>
-                <div class="flex justify-between items-center">
+                <div class="flex justify-between items-center mb-3">
                     <span class="text-muted">Letzter Scan</span>
                     <span style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary);">
                         {{ config.last_scan[:16] if config.last_scan else 'Noch nie' }}
+                    </span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-muted">Browser-Engine</span>
+                    <span style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent);">
+                        Patchright + Recognizer AI
                     </span>
                 </div>
             </div>
@@ -120,4 +139,52 @@
         </a>
     </div>
 </form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('btn-test-reddit').addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = 'Stealth-Login laeuft...';
+
+    const resultDiv = document.getElementById('test-result');
+
+    try {
+        const response = await fetch('/api/reddit/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }
+        });
+        const data = await response.json();
+
+        resultDiv.textContent = '';
+        const alert = document.createElement('div');
+        alert.style.padding = '0.5rem';
+        alert.style.margin = '0';
+
+        if (data.success) {
+            alert.className = 'alert alert-success';
+            alert.textContent = data.message;
+        } else {
+            alert.className = 'alert alert-danger';
+            alert.textContent = data.error;
+        }
+        resultDiv.appendChild(alert);
+    } catch (error) {
+        resultDiv.textContent = '';
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-danger';
+        alert.style.padding = '0.5rem';
+        alert.style.margin = '0';
+        alert.textContent = error.message;
+        resultDiv.appendChild(alert);
+    } finally {
+        this.disabled = false;
+        this.textContent = '';
+        const icon = document.createElement('i');
+        icon.className = 'bi bi-lightning';
+        this.appendChild(icon);
+        this.appendChild(document.createTextNode(' Login testen'));
+    }
+});
+</script>
 {% endblock %}

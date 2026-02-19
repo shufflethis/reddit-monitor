@@ -64,24 +64,31 @@ class AppConfig:
     db_path: str = str(DB_DIR / "reddit_monitor.db")
     log_level: str = "INFO"
 
+_logging_initialized = False
+
 def setup_logging():
-    """Setup application logging"""
+    """Setup application logging (idempotent - safe to call multiple times)"""
+    global _logging_initialized
+    if _logging_initialized:
+        return
+    _logging_initialized = True
+
     log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    
+
     # File handler
     file_handler = logging.FileHandler(LOGS_DIR / "app.log")
     file_handler.setFormatter(logging.Formatter(log_format))
-    
+
     # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(logging.Formatter(log_format))
-    
+
     # Root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
-    
+
     # Third-party loggers
     logging.getLogger('werkzeug').setLevel(logging.WARNING)
     logging.getLogger('playwright').setLevel(logging.WARNING)

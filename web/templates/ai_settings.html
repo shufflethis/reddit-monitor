@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}AI Settings - Reddit Monitor{% endblock %}
+
+{% block content %}
+<div class="page-header fade-in-up">
+    <h1 class="page-title"><i class="bi bi-cpu"></i> AI Einstellungen</h1>
+    <p class="page-subtitle">LLM-Kommentargenerierung & Sprach-Transkription konfigurieren</p>
+</div>
+
+<form method="POST" action="/settings/ai">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="grid grid-2 mb-4">
+        <!-- OpenRouter LLM -->
+        <div class="card fade-in-up stagger-1">
+            <div class="card-header">
+                <i class="bi bi-chat-dots"></i>
+                <span>OpenRouter LLM</span>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">API Key</label>
+                    <input type="password" class="form-control" name="openrouter_api_key"
+                           value="{{ config.openrouter_api_key or '' }}"
+                           placeholder="sk-or-...">
+                    <div class="form-text">
+                        API Key von <a href="https://openrouter.ai/keys" target="_blank" style="color: var(--accent);">openrouter.ai/keys</a>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Model</label>
+                    <select class="form-control" name="openrouter_model" id="model-select">
+                        <option value="meta-llama/llama-3.1-70b-instruct" {% if config.openrouter_model == 'meta-llama/llama-3.1-70b-instruct' %}selected{% endif %}>Llama 3.1 70B</option>
+                        <option value="meta-llama/llama-3.1-8b-instruct" {% if config.openrouter_model == 'meta-llama/llama-3.1-8b-instruct' %}selected{% endif %}>Llama 3.1 8B</option>
+                        <option value="google/gemma-2-27b-it" {% if config.openrouter_model == 'google/gemma-2-27b-it' %}selected{% endif %}>Gemma 2 27B</option>
+                        <option value="mistralai/mixtral-8x7b-instruct" {% if config.openrouter_model == 'mistralai/mixtral-8x7b-instruct' %}selected{% endif %}>Mixtral 8x7B</option>
+                        <option value="anthropic/claude-3.5-sonnet" {% if config.openrouter_model == 'anthropic/claude-3.5-sonnet' %}selected{% endif %}>Claude 3.5 Sonnet</option>
+                        <option value="openai/gpt-4o" {% if config.openrouter_model == 'openai/gpt-4o' %}selected{% endif %}>GPT-4o</option>
+                        <option value="custom" id="custom-option">Custom...</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="custom-model-group" style="display: none;">
+                    <label class="form-label">Custom Model ID</label>
+                    <input type="text" class="form-control" name="openrouter_model_custom" id="custom-model-input"
+                           placeholder="org/model-name">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Persona / Schreibstil</label>
+                    <textarea class="form-control" name="openrouter_persona" rows="4"
+                              placeholder="z.B. 'Du bist ein freundlicher, hilfsbereiter Redditor der gerne praktische Tipps gibt. Schreibe in Deutsch, informell und mit Humor.'">{{ config.openrouter_persona or '' }}</textarea>
+                    <div class="form-text">
+                        Beschreibe den Schreibstil und die Persoenlichkeit fuer generierte Kommentare.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Groq Transcription -->
+        <div class="card fade-in-up stagger-2">
+            <div class="card-header">
+                <i class="bi bi-mic"></i>
+                <span>Groq Whisper Transkription</span>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">Groq API Key</label>
+                    <input type="password" class="form-control" name="groq_api_key"
+                           value="{{ config.groq_api_key or '' }}"
+                           placeholder="gsk_...">
+                    <div class="form-text">
+                        Kostenloser API Key von <a href="https://console.groq.com/keys" target="_blank" style="color: var(--accent);">console.groq.com/keys</a>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Sprache</label>
+                    <select class="form-control" name="groq_language">
+                        <option value="de" {% if config.groq_language == 'de' %}selected{% endif %}>Deutsch</option>
+                        <option value="en" {% if config.groq_language == 'en' %}selected{% endif %}>English</option>
+                        <option value="fr" {% if config.groq_language == 'fr' %}selected{% endif %}>Francais</option>
+                        <option value="es" {% if config.groq_language == 'es' %}selected{% endif %}>Espanol</option>
+                    </select>
+                    <div class="form-text">
+                        Sprache der Spracheingaben fuer bessere Transkription.
+                    </div>
+                </div>
+
+                <hr style="border-color: var(--border); margin: 1.5rem 0;">
+
+                <div class="form-group">
+                    <label class="form-label">0captcha API Key</label>
+                    <input type="password" class="form-control" name="captcha_api_key"
+                           value="{{ config.captcha_api_key or '' }}"
+                           placeholder="API Key von 0captcha.com">
+                    <div class="form-text">
+                        Fuer Reddit Login (reCAPTCHA). Key von <a href="https://0captcha.com" target="_blank" style="color: var(--accent);">0captcha.com</a>
+                    </div>
+                </div>
+
+                <hr style="border-color: var(--border); margin: 1.5rem 0;">
+
+                <!-- Status -->
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-muted">Captcha</span>
+                    <span class="badge {% if config.captcha_api_key %}badge-success{% else %}badge-secondary{% endif %}">
+                        {% if config.captcha_api_key %}Konfiguriert{% else %}Nicht gesetzt{% endif %}
+                    </span>
+                </div>
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-muted">OpenRouter</span>
+                    <span class="badge {% if config.openrouter_api_key %}badge-success{% else %}badge-secondary{% endif %}">
+                        {% if config.openrouter_api_key %}Konfiguriert{% else %}Nicht gesetzt{% endif %}
+                    </span>
+                </div>
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-muted">Model</span>
+                    <span style="color: var(--accent); font-family: var(--font-mono); font-size: 0.8rem;">{{ config.openrouter_model or '-' }}</span>
+                </div>
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-muted">Groq</span>
+                    <span class="badge {% if config.groq_api_key %}badge-success{% else %}badge-secondary{% endif %}">
+                        {% if config.groq_api_key %}Konfiguriert{% else %}Nicht gesetzt{% endif %}
+                    </span>
+                </div>
+
+                <button type="button" id="btn-test-ai" class="btn btn-primary w-full"
+                        {% if not config.openrouter_api_key %}disabled{% endif %}>
+                    <i class="bi bi-lightning"></i>
+                    LLM Test
+                </button>
+                <div id="test-result" class="mt-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex gap-2 fade-in-up stagger-3">
+        <button type="submit" class="btn btn-primary btn-lg">
+            <i class="bi bi-check-lg"></i>
+            Speichern
+        </button>
+        <a href="/" class="btn btn-secondary btn-lg">
+            <i class="bi bi-arrow-left"></i>
+            Zurueck
+        </a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Custom model toggle
+const modelSelect = document.getElementById('model-select');
+const customGroup = document.getElementById('custom-model-group');
+const customInput = document.getElementById('custom-model-input');
+
+// Check if current value is not in the dropdown options
+const currentModel = {{ (config.openrouter_model or "") | tojson }};
+const standardModels = Array.from(modelSelect.options).map(o => o.value).filter(v => v !== 'custom');
+if (currentModel && !standardModels.includes(currentModel)) {
+    modelSelect.value = 'custom';
+    customGroup.style.display = 'block';
+    customInput.value = currentModel;
+}
+
+modelSelect.addEventListener('change', function() {
+    if (this.value === 'custom') {
+        customGroup.style.display = 'block';
+        customInput.focus();
+    } else {
+        customGroup.style.display = 'none';
+        customInput.value = '';
+    }
+});
+
+// LLM Test
+document.getElementById('btn-test-ai').addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = 'Generiere...';
+
+    const resultDiv = document.getElementById('test-result');
+
+    try {
+        const response = await fetch('/api/ai/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }
+        });
+        const data = await response.json();
+
+        // Clear previous result
+        resultDiv.textContent = '';
+
+        const alert = document.createElement('div');
+        alert.style.padding = '0.5rem';
+        alert.style.margin = '0';
+
+        if (data.success) {
+            alert.className = 'alert alert-success';
+            const strong = document.createElement('strong');
+            strong.textContent = 'Generiert: ';
+            alert.appendChild(strong);
+            alert.appendChild(document.createTextNode(data.comment.substring(0, 200) + '...'));
+        } else {
+            alert.className = 'alert alert-danger';
+            alert.textContent = data.error;
+        }
+        resultDiv.appendChild(alert);
+    } catch (error) {
+        resultDiv.textContent = '';
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-danger';
+        alert.style.padding = '0.5rem';
+        alert.style.margin = '0';
+        alert.textContent = error.message;
+        resultDiv.appendChild(alert);
+    } finally {
+        this.disabled = false;
+        this.textContent = '';
+        const icon = document.createElement('i');
+        icon.className = 'bi bi-lightning';
+        this.appendChild(icon);
+        this.appendChild(document.createTextNode(' LLM Test'));
+    }
+});
+</script>
+{% endblock %}

@@ -258,64 +258,136 @@
 <script>
 const csrfToken = '{{ csrf_token() }}';
 
-// Scan button
+// Helper to create post element safely
+function createPostElement(post) {
+    const link = document.createElement('a');
+    link.href = post.url;
+    link.target = '_blank';
+    link.className = 'post-item';
+
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'post-title';
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = post.title;
+    const upvoteSpan = document.createElement('span');
+    upvoteSpan.className = 'post-upvotes';
+    upvoteSpan.textContent = '↑ ' + post.upvotes;
+    titleDiv.appendChild(titleSpan);
+    titleDiv.appendChild(upvoteSpan);
+
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'post-content';
+    contentDiv.textContent = (post.content || '').substring(0, 180) + (post.content && post.content.length > 180 ? '...' : '');
+
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'post-meta';
+    metaDiv.textContent = 'r/' + post.subreddit + ' • u/' + post.author;
+
+    link.appendChild(titleDiv);
+    link.appendChild(contentDiv);
+    link.appendChild(metaDiv);
+
+    if (post.matched_keywords && post.matched_keywords.length > 0) {
+        const kwDiv = document.createElement('div');
+        kwDiv.className = 'post-keywords';
+        kwDiv.textContent = '✓ ' + post.matched_keywords.join(', ');
+        link.appendChild(kwDiv);
+    }
+
+    return link;
+}
+
+function showNoPostsMessage(container) {
+    container.textContent = '';
+    const div = document.createElement('div');
+    div.className = 'text-center';
+    div.style.padding = '3rem 1rem';
+    const icon = document.createElement('div');
+    icon.textContent = '✓';
+    icon.style.cssText = 'font-size: 3rem; color: var(--success);';
+    const msg = document.createElement('p');
+    msg.textContent = 'Scan abgeschlossen - keine neuen Posts gefunden';
+    msg.style.color = 'var(--text-muted)';
+    div.appendChild(icon);
+    div.appendChild(msg);
+    container.appendChild(div);
+}
+
+function setBtnLoading(btn, loading, text) {
+    btn.disabled = loading;
+    btn.textContent = '';
+    if (loading) {
+        const spinner = document.createElement('div');
+        spinner.className = 'spinner';
+        btn.appendChild(spinner);
+    }
+    const span = document.createElement('span');
+    span.textContent = text;
+    btn.appendChild(span);
+}
+
+// Scan button with polling
 document.getElementById('btn-scan-now').addEventListener('click', async function() {
-    this.disabled = true;
-    this.innerHTML = '<div class="spinner"></div><span>Scanne...</span>';
+    const btn = this;
+    setBtnLoading(btn, true, 'Starte Scan...');
 
     try {
+        console.log('CSRF Token:', csrfToken);
         const response = await fetch('/api/scan', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken
-            }
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }
         });
-
+        console.log('Response status:', response.status);
         const data = await response.json();
+        console.log('Response data:', data);
 
-        if (data.success) {
-            document.getElementById('posts-count').textContent = data.posts_found;
-            document.getElementById('last-scan-time').textContent = new Date().toLocaleString('de-DE');
-
-            if (data.posts && data.posts.length > 0) {
-                let html = '';
-                data.posts.forEach(post => {
-                    html += `
-                    <a href="${post.url}" target="_blank" class="post-item">
-                        <div class="post-title">
-                            <span>${post.title}</span>
-                            <span class="post-upvotes"><i class="bi bi-arrow-up"></i> ${post.upvotes}</span>
-                        </div>
-                        <div class="post-content">${post.content.substring(0, 180)}...</div>
-                        <div class="post-meta">
-                            <span class="post-subreddit">r/${post.subreddit}</span>
-                            <span>•</span>
-                            <span>u/${post.author}</span>
-                        </div>
-                        ${post.matched_keywords && post.matched_keywords.length > 0 ?
-                          `<div class="post-keywords"><i class="bi bi-check-circle"></i> ${post.matched_keywords.join(', ')}</div>` : ''}
-                    </a>
-                    `;
-                });
-                document.getElementById('posts-container').innerHTML = html;
-            } else {
-                document.getElementById('posts-container').innerHTML = `
-                    <div class="text-center" style="padding: 3rem 1rem;">
-                        <i class="bi bi-check-circle" style="font-size: 3rem; color: var(--success);"></i>
-                        <p class="mt-2" style="color: var(--success);">Scan abgeschlossen</p>
-                        <p style="font-size: 0.85rem; color: var(--text-muted);">Keine neuen Posts gefunden, die den Guardrails entsprechen</p>
-                    </div>
-                `;
-            }
-        } else {
+        if (!data.success && data.error !== 'Scan läuft bereits') {
             alert('Fehler: ' + data.error);
+            setBtnLoading(btn, false, 'Jetzt scannen');
+            return;
         }
+
+        setBtnLoading(btn, true, 'Scanne...');
+
+        const pollStatus = async () => {
+            try {
+                const statusRes = await fetch('/api/scan/status', { headers: { 'X-CSRFToken': csrfToken } });
+                const statusData = await statusRes.json();
+
+                if (statusData.status === 'running') {
+                    setTimeout(pollStatus, 2000);
+                    return;
+                }
+
+                setBtnLoading(btn, false, 'Jetzt scannen');
+
+                if (statusData.status === 'completed' && statusData.results) {
+                    const results = statusData.results;
+                    document.getElementById('posts-count').textContent = results.posts_found || 0;
+                    document.getElementById('last-scan-time').textContent = new Date().toLocaleString('de-DE');
+
+                    const container = document.getElementById('posts-container');
+                    container.textContent = '';
+
+                    if (results.posts && results.posts.length > 0) {
+                        results.posts.forEach(post => container.appendChild(createPostElement(post)));
+                    } else {
+                        showNoPostsMessage(container);
+                    }
+                } else if (statusData.status === 'error') {
+                    alert('Scan Fehler: ' + (statusData.results?.error || 'Unbekannt'));
+                }
+            } catch (e) {
+                console.error('Poll error:', e);
+                setTimeout(pollStatus, 3000);
+            }
+        };
+
+        setTimeout(pollStatus, 2000);
+
     } catch (error) {
         alert('Fehler: ' + error.message);
-    } finally {
-        this.disabled = false;
-        this.innerHTML = '<i class="bi bi-search"></i><span>Jetzt scannen</span>';
+        setBtnLoading(btn, false, 'Jetzt scannen');
     }
 });
 

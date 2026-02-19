@@ -4,6 +4,7 @@ Reddit monitor core functionality
 
 import asyncio
 import logging
+import random
 from datetime import datetime, time
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
@@ -38,11 +39,12 @@ class RedditPost:
     comments_count: int = 0
     status: PostStatus = PostStatus.NEW
     matched_keywords: List[str] = None
-    
+    thumbnail: Optional[str] = None
+
     def __post_init__(self):
         if self.matched_keywords is None:
             self.matched_keywords = []
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
@@ -57,7 +59,8 @@ class RedditPost:
             'flair': self.flair,
             'comments_count': self.comments_count,
             'status': self.status.value,
-            'matched_keywords': self.matched_keywords
+            'matched_keywords': self.matched_keywords,
+            'thumbnail': self.thumbnail,
         }
 
 class RedditMonitor:
@@ -77,9 +80,10 @@ class RedditMonitor:
         self.browser = await playwright.chromium.launch(headless=config.reddit.headless)
         self.page = await self.browser.new_page()
         
-        # Set user agent to avoid detection
+        # Set realistic user agent to avoid detection
         await self.page.set_extra_http_headers({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9,de;q=0.8',
         })
         
         logger.info("Reddit monitor started")
@@ -162,121 +166,227 @@ class RedditMonitor:
         post.matched_keywords = matched_keywords
         return True
     
-    async def scan_subreddit(self, subreddit: str) -> List[RedditPost]:
-        """Scan a subreddit for new posts"""
+    async def scan_subreddit(self, subreddit: str, retry: int = 0) -> List[RedditPost]:
+        """Scan a subreddit for new posts using old.reddit.com (more stable)"""
         logger.info(f"Scanning subreddit: {subreddit}")
-        
+
         try:
-            # Navigate to subreddit
-            url = f"https://www.reddit.com/r/{subreddit}/new/"
-            await self.page.goto(url)
-            await self.page.wait_for_load_state('networkidle')
-            
-            # Wait for posts to load
-            await self.page.wait_for_selector('div[data-testid="post-container"]', timeout=10000)
-            
+            # Use old.reddit.com - much more stable for scraping
+            url = f"https://old.reddit.com/r/{subreddit}/new/"
+            response = await self.page.goto(url, timeout=20000)
+
+            # Check for errors - retry on 403 (rate limit)
+            if response and response.status == 403 and retry < 2:
+                wait = (retry + 1) * 15 + random.randint(5, 15)
+                logger.warning(f"r/{subreddit} returned 403 - waiting {wait}s before retry {retry + 1}/2")
+                await asyncio.sleep(wait)
+                return await self.scan_subreddit(subreddit, retry=retry + 1)
+
+            if response and response.status >= 400:
+                logger.warning(f"Subreddit r/{subreddit} returned HTTP {response.status} - skipping")
+                return []
+
+            await self.page.wait_for_load_state('domcontentloaded')
+
+            # Quick check for error page or private subreddit
+            page_content = await self.page.content()
+            if 'private' in page_content.lower() or 'banned' in page_content.lower() or 'error' in page_content[:500].lower():
+                logger.warning(f"Subreddit r/{subreddit} appears private/banned - skipping")
+                return []
+
+            # Wait for posts to load (shorter timeout)
+            try:
+                await self.page.wait_for_selector('div.thing', timeout=8000)
+            except:
+                logger.warning(f"No posts found in r/{subreddit} - may be empty or restricted")
+                return []
+
             # Extract posts
             posts = []
-            
-            # Get post elements
-            post_elements = await self.page.query_selector_all('div[data-testid="post-container"]')
-            
+
+            # Get post elements from old reddit
+            post_elements = await self.page.query_selector_all('div.thing.link')
+
             for element in post_elements[:20]:  # Limit to first 20 posts
                 try:
-                    # Extract post data
-                    post_id = await element.get_attribute('id') or ''
+                    # Extract post ID
+                    post_id = await element.get_attribute('data-fullname') or ''
                     if not post_id.startswith('t3_'):
                         continue
-                    
+
                     # Get title
-                    title_elem = await element.query_selector('h3')
+                    title_elem = await element.query_selector('a.title')
                     title = await title_elem.text_content() if title_elem else "No title"
-                    
-                    # Get content (first paragraph)
-                    content_elem = await element.query_selector('div[data-testid="post-content"] p')
-                    content = await content_elem.text_content() if content_elem else ""
-                    
+
                     # Get URL
-                    link_elem = await element.query_selector('a[data-testid="post-title"]')
-                    href = await link_elem.get_attribute('href') if link_elem else ""
-                    url = f"https://www.reddit.com{href}" if href and href.startswith('/') else href or ""
-                    
+                    href = await title_elem.get_attribute('href') if title_elem else ""
+                    post_url = href if href and href.startswith('http') else f"https://old.reddit.com{href}" if href else ""
+
                     # Get author
-                    author_elem = await element.query_selector('a[data-testid="post_author_link"]')
+                    author_elem = await element.query_selector('a.author')
                     author = await author_elem.text_content() if author_elem else "[deleted]"
-                    
-                    # Get upvotes
-                    vote_elem = await element.query_selector('div[data-testid="vote-arrows"] + div')
-                    upvotes_text = await vote_elem.text_content() if vote_elem else "0"
+
+                    # Get upvotes (score)
+                    score_elem = await element.query_selector('div.score.unvoted')
+                    upvotes_text = await score_elem.get_attribute('title') if score_elem else "0"
                     upvotes = 0
                     try:
-                        if 'k' in upvotes_text:
-                            upvotes = int(float(upvotes_text.replace('k', '').replace(',', '')) * 1000)
-                        else:
-                            upvotes = int(upvotes_text.replace(',', ''))
+                        upvotes = int(upvotes_text) if upvotes_text else 0
                     except:
-                        upvotes = 0
-                    
+                        # Try alternate score location
+                        score_elem2 = await element.query_selector('div.score.likes')
+                        if score_elem2:
+                            upvotes_text = await score_elem2.text_content() or "0"
+                            try:
+                                upvotes = int(upvotes_text.replace(',', ''))
+                            except:
+                                upvotes = 0
+
                     # Get flair
-                    flair_elem = await element.query_selector('span[data-testid="flair"]')
+                    flair_elem = await element.query_selector('span.linkflairlabel')
                     flair = await flair_elem.text_content() if flair_elem else None
-                    
+
                     # Get comment count
-                    comments_elem = await element.query_selector('a[data-testid="comments"]')
+                    comments_elem = await element.query_selector('a.comments')
                     comments_text = await comments_elem.text_content() if comments_elem else "0 comments"
                     comments_count = 0
                     try:
-                        comments_count = int(''.join(filter(str.isdigit, comments_text)))
+                        # Extract number from "XX comments"
+                        num_str = ''.join(filter(str.isdigit, comments_text.split()[0]))
+                        comments_count = int(num_str) if num_str else 0
                     except:
                         comments_count = 0
-                    
+
+                    # Get timestamp
+                    time_elem = await element.query_selector('time')
+                    created_utc = datetime.now().timestamp()
+                    if time_elem:
+                        datetime_attr = await time_elem.get_attribute('datetime')
+                        if datetime_attr:
+                            try:
+                                created_utc = datetime.fromisoformat(datetime_attr.replace('Z', '+00:00')).timestamp()
+                            except:
+                                pass
+
+                    # Get thumbnail/image URL
+                    thumbnail = None
+                    thumb_elem = await element.query_selector('a.thumbnail img')
+                    if thumb_elem:
+                        thumb_src = await thumb_elem.get_attribute('src')
+                        if thumb_src and 'thumbs.redditmedia' in thumb_src:
+                            thumbnail = thumb_src
+                    # Also check data-url for direct image links
+                    data_url = await element.get_attribute('data-url')
+                    if data_url and any(data_url.endswith(ext) for ext in ('.jpg', '.jpeg', '.png', '.gif', '.webp')):
+                        thumbnail = data_url
+                    elif data_url and 'i.redd.it' in (data_url or ''):
+                        thumbnail = data_url
+
                     post = RedditPost(
                         id=post_id.replace('t3_', ''),
-                        title=title,
-                        content=content,
-                        url=url,
+                        title=title.strip(),
+                        content="",  # Old reddit doesn't show content in list view
+                        url=post_url,
                         subreddit=subreddit,
                         author=author,
                         upvotes=upvotes,
-                        created_utc=datetime.now().timestamp(),
+                        created_utc=created_utc,
                         flair=flair,
-                        comments_count=comments_count
+                        comments_count=comments_count,
+                        thumbnail=thumbnail,
                     )
-                    
+
                     posts.append(post)
-                    
+
                 except Exception as e:
                     logger.debug(f"Error extracting post: {e}")
                     continue
-            
+
             logger.info(f"Found {len(posts)} posts in r/{subreddit}")
             return posts
-            
+
         except Exception as e:
             logger.error(f"Error scanning subreddit r/{subreddit}: {e}")
             return []
     
+    async def fetch_post_content(self, post: 'RedditPost') -> str:
+        """Navigate to individual post page and extract selftext + image"""
+        try:
+            # Build old.reddit.com URL for the post
+            post_url = post.url
+            if 'old.reddit.com' not in post_url:
+                post_url = post_url.replace('www.reddit.com', 'old.reddit.com')
+                if 'old.reddit.com' not in post_url:
+                    post_url = post_url.replace('reddit.com', 'old.reddit.com')
+
+            await self.page.goto(post_url, timeout=15000)
+            await self.page.wait_for_load_state('domcontentloaded')
+
+            # Extract selftext from old.reddit.com post page
+            content = ""
+            content_elem = await self.page.query_selector('div.thing.link div.usertext-body div.md')
+            if content_elem:
+                text = await content_elem.text_content()
+                content = text.strip() if text else ""
+                logger.debug(f"Fetched content for post {post.id}: {len(content)} chars")
+
+            # Try to find full-res image if we don't have one yet
+            if not post.thumbnail:
+                # Check for direct image link in post
+                img_elem = await self.page.query_selector('div.thing.link a.thumbnail img')
+                if img_elem:
+                    src = await img_elem.get_attribute('src')
+                    if src and ('i.redd.it' in src or 'i.imgur.com' in src or 'preview.redd.it' in src):
+                        post.thumbnail = src
+                # Check for image in expando
+                if not post.thumbnail:
+                    expando_img = await self.page.query_selector('div.expando img.preview')
+                    if expando_img:
+                        src = await expando_img.get_attribute('src')
+                        if src:
+                            post.thumbnail = src
+
+            return content
+        except Exception as e:
+            logger.debug(f"Could not fetch content for post {post.id}: {e}")
+            return ""
+
     async def scan_all(self) -> List[RedditPost]:
         """Scan all configured subreddits"""
+        # Login is optional - public subreddits can be scraped without login
         if not self.logged_in and config.reddit.username and config.reddit.password:
             success = await self.login(config.reddit.username, config.reddit.password)
             if not success:
-                logger.error("Cannot scan without login")
-                return []
-        
+                logger.warning("Login failed - continuing without login (public subreddits only)")
+                # Don't return empty - try to scan public subreddits anyway
+
         all_posts = []
-        for subreddit in config.reddit.subreddits:
+        for i, subreddit in enumerate(config.reddit.subreddits):
+            # Random delay between subreddits to avoid rate limiting
+            if i > 0:
+                delay = random.uniform(3, 8)
+                logger.debug(f"Waiting {delay:.1f}s before next subreddit")
+                await asyncio.sleep(delay)
+
             posts = await self.scan_subreddit(subreddit)
-            
+
             # Filter by guardrails
             filtered_posts = []
             for post in posts:
                 if self.check_guardrails(post):
                     filtered_posts.append(post)
-            
+
             logger.info(f"r/{subreddit}: {len(posts)} total, {len(filtered_posts)} passed guardrails")
+
+            # Fetch full content for posts that passed guardrails
+            for post in filtered_posts:
+                if not post.content:
+                    delay = random.uniform(1, 3)
+                    await asyncio.sleep(delay)
+                    post.content = await self.fetch_post_content(post)
+
             all_posts.extend(filtered_posts)
-        
+
         self.last_scan_time = datetime.now()
         return all_posts
     

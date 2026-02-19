@@ -12,29 +12,41 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <div class="grid grid-2 mb-4" style="grid-template-columns: 2fr 1fr;">
-        <!-- Webhook Configuration -->
+        <!-- Bot Token Configuration (Preferred) -->
         <div class="card fade-in-up stagger-1">
             <div class="card-header">
-                <i class="bi bi-link-45deg"></i>
-                <span>Webhook Konfiguration</span>
+                <i class="bi bi-robot"></i>
+                <span>Bot Token (Empfohlen)</span>
             </div>
             <div class="card-body">
                 <div class="form-group">
-                    <label class="form-label">Slack Webhook URL</label>
-                    <input type="url" class="form-control" name="webhook_url"
-                           value="{{ config.slack_webhook or '' }}"
-                           placeholder="Deine Slack Webhook URL">
+                    <label class="form-label">Slack Bot Token</label>
+                    <input type="password" class="form-control" name="slack_bot_token"
+                           value="{{ config.slack_bot_token or '' }}"
+                           placeholder="xoxb-...">
                     <div class="form-text">
-                        <a href="https://api.slack.com/messaging/webhooks" target="_blank" style="color: var(--accent);">
-                            Anleitung zum Erstellen
-                        </a>
+                        Bot Token aus deiner Slack App. Erlaubt freie Channel-Wahl.
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Channel</label>
-                    <input type="text" class="form-control" name="slack_channel"
-                           value="{{ config.slack_channel or '#general' }}" placeholder="#general">
+                    <label class="form-label">Channel ID</label>
+                    <input type="text" class="form-control" name="slack_channel_id"
+                           value="{{ config.slack_channel_id or '' }}"
+                           placeholder="C0AFT18FN4D">
+                    <div class="form-text">
+                        Rechtsklick auf Channel &rarr; Channel-Details &rarr; ID kopieren
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">App-Level Token (Socket Mode)</label>
+                    <input type="password" class="form-control" name="slack_app_token"
+                           value="{{ config.slack_app_token or '' }}"
+                           placeholder="xapp-...">
+                    <div class="form-text">
+                        App-Level Token fuer Socket Mode. Unter App Settings &rarr; Basic Information &rarr; App-Level Tokens generieren (Scope: connections:write).
+                    </div>
                 </div>
 
                 <div class="grid grid-2">
@@ -49,6 +61,22 @@
                                value="{{ config.bot_emoji or ':robot_face:' }}">
                     </div>
                 </div>
+
+                <hr style="border-color: var(--border); margin: 1.5rem 0;">
+                <details style="color: var(--text-muted);">
+                    <summary style="cursor: pointer; margin-bottom: 0.5rem;">Webhook Fallback (optional)</summary>
+                    <div class="form-group" style="margin-top: 0.5rem;">
+                        <label class="form-label">Slack Webhook URL</label>
+                        <input type="url" class="form-control" name="webhook_url"
+                               value="{{ config.slack_webhook or '' }}"
+                               placeholder="https://hooks.slack.com/services/...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Channel Name</label>
+                        <input type="text" class="form-control" name="slack_channel"
+                               value="{{ config.slack_channel or '#general' }}" placeholder="#general">
+                    </div>
+                </details>
             </div>
         </div>
 
@@ -60,17 +88,29 @@
             </div>
             <div class="card-body">
                 <div class="flex justify-between items-center mb-3">
-                    <span class="text-muted">Webhook</span>
-                    <span class="badge {% if config.slack_webhook %}badge-success{% else %}badge-secondary{% endif %}">
-                        {% if config.slack_webhook %}Konfiguriert{% else %}Nicht konfiguriert{% endif %}
+                    <span class="text-muted">Bot Token</span>
+                    <span class="badge {% if config.slack_bot_token %}badge-success{% else %}badge-secondary{% endif %}">
+                        {% if config.slack_bot_token %}Konfiguriert{% else %}Nicht gesetzt{% endif %}
                     </span>
                 </div>
-                <div class="flex justify-between items-center mb-4">
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-muted">App Token</span>
+                    <span class="badge {% if config.slack_app_token %}badge-success{% else %}badge-secondary{% endif %}">
+                        {% if config.slack_app_token %}Socket Mode{% else %}Nicht gesetzt{% endif %}
+                    </span>
+                </div>
+                <div class="flex justify-between items-center mb-3">
                     <span class="text-muted">Channel</span>
-                    <span style="color: var(--accent);">{{ config.slack_channel or '-' }}</span>
+                    <span style="color: var(--accent);">{{ config.slack_channel_id or config.slack_channel or '-' }}</span>
+                </div>
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-muted">Webhook</span>
+                    <span class="badge {% if config.slack_webhook %}badge-success{% else %}badge-secondary{% endif %}">
+                        {% if config.slack_webhook %}Fallback{% else %}Nicht gesetzt{% endif %}
+                    </span>
                 </div>
 
-                <button type="button" id="btn-test-slack" class="btn btn-slack w-full" {% if not config.slack_webhook %}disabled{% endif %}>
+                <button type="button" id="btn-test-slack" class="btn btn-slack w-full" {% if not config.slack_bot_token and not config.slack_webhook %}disabled{% endif %}>
                     <i class="bi bi-send"></i>
                     Test senden
                 </button>

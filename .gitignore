@@ -3,11 +3,25 @@ __pycache__/
 *$py.class
 venv/
 .env
-data/*.db
-data/*.log
 *.sqlite
 .DS_Store
-data/db/
-data/logs/
+
+# Data directory (configs, cookies, sessions — all sensitive/local)
 data/config.json
 data/users.json
+data/reddit_cookies.json
+data/reddit_token.json
+data/reddit_browser_profile/
+data/thread_posts.json
+data/scan_results.json
+data/scan_status.json
+data/seen_posts.json
+data/logs/
+data/*.db
+data/db/
+data/*.log
+data/*.png
+
+# ML models (large files, auto-downloaded)
+*.pt
+*.onnx

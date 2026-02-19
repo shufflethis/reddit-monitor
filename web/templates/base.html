@@ -715,6 +715,11 @@
                     </a>
                 </li>
                 <li>
+                    <a href="/settings/ai" class="nav-link {% if request.endpoint == 'ai_settings' %}active{% endif %}">
+                        <i class="bi bi-cpu"></i> AI
+                    </a>
+                </li>
+                <li>
                     <a href="/settings/guardrails" class="nav-link {% if request.endpoint == 'guardrails' %}active{% endif %}">
                         <i class="bi bi-shield-check"></i> Guardrails
                     </a>
