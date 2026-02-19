@@ -55,6 +55,15 @@ def create_bolt_app(bot_token: str) -> App:
     """Create and configure the Slack Bolt app with all handlers"""
     bolt_app = App(token=bot_token)
 
+    # Global middleware to log ALL incoming actions/events
+    @bolt_app.middleware
+    def log_all_requests(body, next, logger):
+        req_type = body.get("type", "unknown")
+        action_ids = [a.get("action_id", "?") for a in body.get("actions", [])]
+        event_type = body.get("event", {}).get("type", "")
+        logger.info(f"[BOLT MIDDLEWARE] type={req_type} actions={action_ids} event={event_type}")
+        next()
+
     # ── Button: Upvote ──────────────────────────────────────────────
     @bolt_app.action("upvote_post")
     def handle_upvote(ack, body, say, client):
@@ -79,7 +88,8 @@ def create_bolt_app(bot_token: str) -> App:
                 success = run_upvote(
                     cfg.get("reddit_username", ""),
                     cfg.get("reddit_password", ""),
-                    post_data["url"],
+                    post_data.get("url", ""),
+                    post_id_override=post_data.get("id", ""),
                 )
                 msg = "Upvote successful!" if success else "Upvote failed — check logs."
                 client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=msg)
@@ -139,15 +149,20 @@ def create_bolt_app(bot_token: str) -> App:
     @bolt_app.action("confirm_post")
     def handle_confirm_post(ack, body, client):
         ack()
+        logger.info("=== CONFIRM_POST button clicked ===")
         actions = body.get("actions", [])
         if not actions:
+            logger.warning("confirm_post: no actions in body")
             return
 
         value = actions[0].get("value", "{}")
         try:
             data = json.loads(value)
-        except Exception:
+        except Exception as e:
+            logger.error(f"confirm_post: JSON parse error: {e}, value={value[:200]}")
             return
+
+        logger.info(f"confirm_post: post_url={data.get('post_url', 'MISSING')}, comment_len={len(data.get('comment_text', ''))}")
 
         thread_ts = _get_thread_ts(body)
         channel = _get_channel(body)
@@ -161,17 +176,21 @@ def create_bolt_app(bot_token: str) -> App:
         def _do_comment():
             try:
                 cfg = _get_config()
+                username = cfg.get("reddit_username", "")
+                password = cfg.get("reddit_password", "")
+                logger.info(f"confirm_post: username={'SET' if username else 'EMPTY'}, password={'SET' if password else 'EMPTY'}")
                 from .reddit_actions import run_comment
                 success = run_comment(
-                    cfg.get("reddit_username", ""),
-                    cfg.get("reddit_password", ""),
+                    username,
+                    password,
                     data["post_url"],
                     data["comment_text"],
                 )
                 msg = "Comment posted successfully!" if success else "Failed to post comment — check logs."
                 client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=msg)
             except Exception as e:
-                logger.error(f"Comment post error: {e}")
+                import traceback
+                logger.error(f"Comment post error: {e}\n{traceback.format_exc()}")
                 client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=f"Comment error: {e}")
 
         threading.Thread(target=_do_comment, daemon=True).start()
@@ -259,23 +278,36 @@ def create_bolt_app(bot_token: str) -> App:
         def _process_voice():
             try:
                 cfg = _get_config()
-                headers = {"Authorization": f"Bearer {cfg.get('slack_bot_token', '')}"}
-
-                # Download the audio file
-                audio_response = requests.get(download_url, headers=headers, timeout=30)
-                audio_response.raise_for_status()
-                audio_bytes = audio_response.content
 
                 client.chat_postMessage(channel=channel_id, thread_ts=thread_ts, text="Transcribing voice clip...")
 
-                # Transcribe
-                from .groq_transcriber import GroqTranscriber
-                transcriber = GroqTranscriber(
-                    api_key=cfg.get("groq_api_key", ""),
-                    language=cfg.get("groq_language", "en"),
-                )
-                filename = file_data.get("name", "audio.ogg")
-                instruction = transcriber.transcribe(audio_bytes, filename)
+                # Try Slack's built-in transcription first (wait up to 15s)
+                instruction = None
+                import time
+                for _ in range(5):
+                    updated = client.files_info(file=file_data.get("id"))
+                    transcript = updated.get("file", {}).get("transcription", {})
+                    if transcript.get("status") == "complete":
+                        instruction = transcript.get("preview", {}).get("content", "")
+                        if instruction:
+                            logger.info(f"Using Slack transcription: {instruction[:80]}...")
+                            break
+                    time.sleep(3)
+
+                # Fallback to Groq Whisper if Slack transcript not available
+                if not instruction:
+                    headers = {"Authorization": f"Bearer {cfg.get('slack_bot_token', '')}"}
+                    audio_response = requests.get(download_url, headers=headers, timeout=30)
+                    audio_response.raise_for_status()
+                    audio_bytes = audio_response.content
+
+                    from .groq_transcriber import GroqTranscriber
+                    transcriber = GroqTranscriber(
+                        api_key=cfg.get("groq_api_key", ""),
+                        language=cfg.get("groq_language", "de"),
+                    )
+                    filename = file_data.get("name", "audio.ogg")
+                    instruction = transcriber.transcribe(audio_bytes, filename)
 
                 client.chat_postMessage(
                     channel=channel_id,

@@ -1,0 +1,14 @@
+[Unit]
+Description=Localtunnel for Reddit Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ff-video
+ExecStart=/home/ff-video/.nvm/versions/node/v20.19.3/bin/lt --port 5001 --subdomain reddit-famesuite
+Restart=always
+RestartSec=5
+Environment=PATH=/home/ff-video/.nvm/versions/node/v20.19.3/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=multi-user.target

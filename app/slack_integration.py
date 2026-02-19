@@ -142,10 +142,13 @@ class SlackNotifier:
             })
 
         # Image
-        if post.thumbnail and post.thumbnail.startswith('http'):
+        img_url = post.thumbnail or ""
+        if img_url.startswith('//'):
+            img_url = f'https:{img_url}'
+        if img_url.startswith('http'):
             blocks.append({
                 "type": "image",
-                "image_url": post.thumbnail,
+                "image_url": img_url,
                 "alt_text": post.title[:75],
             })
 
@@ -210,6 +213,67 @@ class SlackNotifier:
                 }
 
         save_thread_posts(thread_posts)
+
+    def notify_replies(self, replies: List[Dict[str, Any]]):
+        """Send Slack notifications for Reddit comment replies"""
+        if not replies:
+            return
+
+        for reply in replies:
+            body = reply.get("body", "")
+            if len(body) > 500:
+                body = body[:500] + "..."
+
+            blocks = [
+                {
+                    "type": "header",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "Reply auf deinen Kommentar",
+                        "emoji": True,
+                    },
+                },
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": (
+                                f"*r/{reply.get('subreddit', '?')}* | "
+                                f"Post: {reply.get('link_title', '?')} | "
+                                f"von u/{reply.get('author', '?')}"
+                            ),
+                        }
+                    ],
+                },
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": body or "(empty)"},
+                },
+            ]
+
+            context_url = reply.get("context", "")
+            if context_url:
+                blocks.append({
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "Auf Reddit ansehen",
+                                "emoji": True,
+                            },
+                            "url": context_url,
+                            "action_id": "view_reply_on_reddit",
+                        }
+                    ],
+                })
+
+            blocks.append({"type": "divider"})
+
+            fallback = f"Reply von u/{reply.get('author', '?')} in r/{reply.get('subreddit', '?')}"
+            self.post_to_slack(fallback, blocks=blocks)
 
     def handle_voice_reply(self, post_id: str, voice_audio_url: str, transcript: str) -> bool:
         """Handle voice reply from Slack"""

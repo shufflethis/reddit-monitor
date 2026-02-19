@@ -273,7 +273,7 @@ class RedditMonitor:
                     thumb_elem = await element.query_selector('a.thumbnail img')
                     if thumb_elem:
                         thumb_src = await thumb_elem.get_attribute('src')
-                        if thumb_src and 'thumbs.redditmedia' in thumb_src:
+                        if thumb_src and ('redditmedia' in thumb_src or 'redd.it' in thumb_src):
                             thumbnail = thumb_src
                     # Also check data-url for direct image links
                     data_url = await element.get_attribute('data-url')
@@ -281,6 +281,10 @@ class RedditMonitor:
                         thumbnail = data_url
                     elif data_url and 'i.redd.it' in (data_url or ''):
                         thumbnail = data_url
+
+                    # Fix protocol-relative URLs
+                    if thumbnail and thumbnail.startswith('//'):
+                        thumbnail = f'https:{thumbnail}'
 
                     post = RedditPost(
                         id=post_id.replace('t3_', ''),
@@ -312,39 +316,78 @@ class RedditMonitor:
     async def fetch_post_content(self, post: 'RedditPost') -> str:
         """Navigate to individual post page and extract selftext + image"""
         try:
-            # Build old.reddit.com URL for the post
-            post_url = post.url
-            if 'old.reddit.com' not in post_url:
-                post_url = post_url.replace('www.reddit.com', 'old.reddit.com')
-                if 'old.reddit.com' not in post_url:
-                    post_url = post_url.replace('reddit.com', 'old.reddit.com')
-
-            await self.page.goto(post_url, timeout=15000)
-            await self.page.wait_for_load_state('domcontentloaded')
-
-            # Extract selftext from old.reddit.com post page
+            # Try JSON API first for content + images (faster, more reliable)
+            import requests as http_req
+            json_url = f"https://old.reddit.com/by_id/t3_{post.id}.json"
+            headers = {"User-Agent": "Mozilla/5.0 (compatible; RedditMonitor/1.0)"}
+            resp = http_req.get(json_url, headers=headers, timeout=10)
             content = ""
-            content_elem = await self.page.query_selector('div.thing.link div.usertext-body div.md')
-            if content_elem:
-                text = await content_elem.text_content()
-                content = text.strip() if text else ""
-                logger.debug(f"Fetched content for post {post.id}: {len(content)} chars")
 
-            # Try to find full-res image if we don't have one yet
-            if not post.thumbnail:
-                # Check for direct image link in post
-                img_elem = await self.page.query_selector('div.thing.link a.thumbnail img')
-                if img_elem:
-                    src = await img_elem.get_attribute('src')
-                    if src and ('i.redd.it' in src or 'i.imgur.com' in src or 'preview.redd.it' in src):
-                        post.thumbnail = src
-                # Check for image in expando
-                if not post.thumbnail:
-                    expando_img = await self.page.query_selector('div.expando img.preview')
-                    if expando_img:
-                        src = await expando_img.get_attribute('src')
-                        if src:
-                            post.thumbnail = src
+            if resp.status_code == 200:
+                data = resp.json()
+                children = data.get("data", {}).get("children", [])
+                if children:
+                    post_data = children[0].get("data", {})
+                    content = post_data.get("selftext", "").strip()
+
+                    # Get preview image (high quality)
+                    if not post.thumbnail or 'thumbs.redditmedia' in (post.thumbnail or ''):
+                        preview = post_data.get("preview", {})
+                        images = preview.get("images", [])
+                        if images:
+                            # Get source (full resolution) image
+                            source = images[0].get("source", {})
+                            img_url = source.get("url", "").replace("&amp;", "&")
+                            if img_url:
+                                post.thumbnail = img_url
+
+                    # For gallery posts, get first gallery image
+                    if not post.thumbnail and post_data.get("is_gallery"):
+                        gallery_data = post_data.get("gallery_data", {})
+                        media_metadata = post_data.get("media_metadata", {})
+                        items = gallery_data.get("items", [])
+                        if items and media_metadata:
+                            first_id = items[0].get("media_id")
+                            if first_id and first_id in media_metadata:
+                                media = media_metadata[first_id]
+                                # Get the largest preview
+                                previews = media.get("p", [])
+                                if previews:
+                                    img_url = previews[-1].get("u", "").replace("&amp;", "&")
+                                    if img_url:
+                                        post.thumbnail = img_url
+                                # Or source image
+                                if not post.thumbnail:
+                                    source = media.get("s", {})
+                                    img_url = source.get("u", "").replace("&amp;", "&")
+                                    if img_url:
+                                        post.thumbnail = img_url
+
+                    # Direct image URL (i.redd.it)
+                    if not post.thumbnail:
+                        url_str = post_data.get("url", "")
+                        if 'i.redd.it' in url_str or 'i.imgur.com' in url_str:
+                            post.thumbnail = url_str
+
+            # Fallback: scrape the page
+            if not content:
+                post_url = post.url
+                if 'old.reddit.com' not in post_url:
+                    post_url = post_url.replace('www.reddit.com', 'old.reddit.com')
+                    if 'old.reddit.com' not in post_url:
+                        post_url = post_url.replace('reddit.com', 'old.reddit.com')
+
+                await self.page.goto(post_url, timeout=15000)
+                await self.page.wait_for_load_state('domcontentloaded')
+
+                content_elem = await self.page.query_selector('div.thing.link div.usertext-body div.md')
+                if content_elem:
+                    text = await content_elem.text_content()
+                    content = text.strip() if text else ""
+
+            # Fix protocol-relative URLs
+            if post.thumbnail and post.thumbnail.startswith('//'):
+                post.thumbnail = f'https:{post.thumbnail}'
 
             return content
         except Exception as e:

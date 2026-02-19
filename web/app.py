@@ -24,6 +24,7 @@ from app.config import setup_logging, DATA_DIR
 
 # Setup logging
 setup_logging()
+logger = logging.getLogger(__name__)
 
 # Paths
 CONFIG_FILE = DATA_DIR / "config.json"
@@ -92,6 +93,8 @@ _CONFIG_DEFAULTS = {
     'groq_api_key': '',
     'groq_language': 'en',
     'captcha_api_key': '',
+    'reply_notifications': True,
+    'reply_check_interval': 5,
 }
 
 
@@ -271,6 +274,8 @@ def slack_settings():
             'notify_new_posts': 'notify_new_posts' in request.form,
             'notify_keywords': 'notify_keywords' in request.form,
             'notify_errors': 'notify_errors' in request.form,
+            'reply_notifications': 'reply_notifications' in request.form,
+            'reply_check_interval': int(request.form.get('reply_check_interval', 5)),
         }
 
         save_config(new_config)
@@ -529,6 +534,341 @@ def api_slack_test():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/slack/interactions', methods=['POST'])
+def slack_interactions():
+    """HTTP endpoint for Slack interactive actions (button clicks).
+    Fallback when Socket Mode doesn't route actions properly."""
+    import json as _json
+    import hmac
+    import hashlib
+    import time
+
+    logger.info("=== Slack HTTP interaction received ===")
+
+    # Parse payload
+    payload_str = request.form.get('payload', '{}')
+    try:
+        payload = _json.loads(payload_str)
+    except Exception as e:
+        logger.error(f"Slack interaction: bad payload: {e}")
+        return jsonify({"error": "bad payload"}), 400
+
+    action_type = payload.get("type")
+    actions = payload.get("actions", [])
+    action_id = actions[0].get("action_id", "") if actions else ""
+    logger.info(f"Slack interaction: type={action_type}, action_id={action_id}")
+
+    # Get channel and thread
+    channel = payload.get("channel", {}).get("id", "")
+    msg = payload.get("message", {})
+    thread_ts = msg.get("ts", "")
+
+    config = get_config()
+    bot_token = config.get("slack_bot_token", "")
+
+    if not bot_token:
+        return jsonify({"ok": True})
+
+    from slack_sdk import WebClient
+    client = WebClient(token=bot_token)
+
+    def _reply(text):
+        try:
+            client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=text)
+        except Exception as e:
+            logger.error(f"Slack reply error: {e}")
+
+    if action_id == "confirm_post":
+        value = actions[0].get("value", "{}")
+        try:
+            data = _json.loads(value)
+        except Exception:
+            return jsonify({"ok": True})
+
+        _reply("Posting comment to Reddit...")
+
+        def _do_comment():
+            try:
+                from app.reddit_actions import run_comment
+                success = run_comment(
+                    config.get("reddit_username", ""),
+                    config.get("reddit_password", ""),
+                    data.get("post_url", ""),
+                    data.get("comment_text", ""),
+                )
+                _reply("Comment posted successfully!" if success else "Failed to post comment — check logs.")
+            except Exception as e:
+                logger.error(f"HTTP comment error: {e}")
+                _reply(f"Comment error: {e}")
+
+        threading.Thread(target=_do_comment, daemon=True).start()
+
+    elif action_id == "upvote_post":
+        value = actions[0].get("value", "{}")
+        try:
+            data = _json.loads(value)
+        except Exception:
+            return jsonify({"ok": True})
+
+        _reply("Upvoting post on Reddit...")
+
+        def _do_upvote():
+            try:
+                from app.reddit_actions import run_upvote
+                success = run_upvote(
+                    config.get("reddit_username", ""),
+                    config.get("reddit_password", ""),
+                    data.get("url", ""),
+                    post_id_override=data.get("id", ""),
+                )
+                _reply("Upvote successful!" if success else "Upvote failed — check logs.")
+            except Exception as e:
+                logger.error(f"HTTP upvote error: {e}")
+                _reply(f"Upvote error: {e}")
+
+        threading.Thread(target=_do_upvote, daemon=True).start()
+
+    elif action_id == "reply_with_voice":
+        value = actions[0].get("value", "{}")
+        try:
+            data = _json.loads(value)
+        except Exception:
+            return jsonify({"ok": True})
+
+        # Store post data in thread mapping
+        from app.slack_integration import load_thread_posts, save_thread_posts
+        thread_posts = load_thread_posts()
+        if thread_ts:
+            from datetime import datetime as _dt
+            thread_posts[thread_ts] = {
+                "post_id": data.get("id"),
+                "post_url": data.get("url"),
+                "post_title": data.get("title"),
+                "post_content": data.get("content", ""),
+                "subreddit": data.get("subreddit"),
+                "stored_at": _dt.now().isoformat(),
+            }
+            save_thread_posts(thread_posts)
+
+        _reply("Send a voice clip or text message in this thread with your comment instructions.\nExample: _\"write something supportive about their situation\"_")
+
+    elif action_id == "ignore_post":
+        value = actions[0].get("value", "{}")
+        try:
+            data = _json.loads(value)
+        except Exception:
+            data = {}
+        _reply(f"Post ignored: _{data.get('title', 'Unknown')}_")
+
+    elif action_id == "regenerate_comment":
+        value = actions[0].get("value", "{}")
+        try:
+            data = _json.loads(value)
+        except Exception:
+            return jsonify({"ok": True})
+
+        def _do_regen():
+            try:
+                from app.llm_generator import LLMGenerator
+                gen = LLMGenerator(
+                    api_key=config.get("openrouter_api_key", ""),
+                    model=config.get("openrouter_model", "meta-llama/llama-3.1-70b-instruct"),
+                    persona=config.get("openrouter_persona", ""),
+                )
+                comment = gen.generate_comment(
+                    post_title=data.get("post_title", ""),
+                    post_content=data.get("post_content", ""),
+                    subreddit=data.get("subreddit", ""),
+                    user_instruction=data.get("instruction", "write a helpful comment"),
+                )
+                from app.slack_bolt_app import _post_comment_preview
+                _post_comment_preview(client, channel, thread_ts, comment, data)
+            except Exception as e:
+                logger.error(f"HTTP regenerate error: {e}")
+                _reply(f"Regeneration error: {e}")
+
+        threading.Thread(target=_do_regen, daemon=True).start()
+
+    else:
+        logger.info(f"Unhandled action_id: {action_id}")
+
+    return jsonify({"ok": True})
+
+
+@app.route('/slack/events', methods=['POST'])
+def slack_events():
+    """HTTP endpoint for Slack Events API (messages, file_shared).
+    Required when Socket Mode is disabled."""
+    import json as _json
+
+    data = request.get_json(silent=True) or {}
+
+    # Slack URL verification challenge
+    if data.get("type") == "url_verification":
+        return jsonify({"challenge": data.get("challenge", "")})
+
+    event = data.get("event", {})
+    event_type = event.get("type", "")
+    logger.info(f"Slack event: type={event_type}")
+
+    # Ignore bot messages and retries
+    if event.get("bot_id") or event.get("subtype"):
+        return jsonify({"ok": True})
+    if request.headers.get("X-Slack-Retry-Num"):
+        return jsonify({"ok": True})
+
+    config = get_config()
+    bot_token = config.get("slack_bot_token", "")
+    if not bot_token:
+        return jsonify({"ok": True})
+
+    from slack_sdk import WebClient
+    client = WebClient(token=bot_token)
+
+    if event_type == "message":
+        thread_ts = event.get("thread_ts")
+        if not thread_ts:
+            return jsonify({"ok": True})
+
+        text = event.get("text", "").strip()
+        if not text:
+            return jsonify({"ok": True})
+
+        channel = event.get("channel", "")
+
+        from app.slack_integration import load_thread_posts
+        thread_posts = load_thread_posts()
+        post_info = thread_posts.get(thread_ts)
+        if not post_info:
+            return jsonify({"ok": True})
+
+        client.chat_postMessage(channel=channel, thread_ts=thread_ts, text="Generating comment...")
+
+        def _process_text():
+            try:
+                from app.llm_generator import LLMGenerator
+                gen = LLMGenerator(
+                    api_key=config.get("openrouter_api_key", ""),
+                    model=config.get("openrouter_model", "meta-llama/llama-3.1-70b-instruct"),
+                    persona=config.get("openrouter_persona", ""),
+                )
+                comment = gen.generate_comment(
+                    post_title=post_info.get("post_title", ""),
+                    post_content=post_info.get("post_content", ""),
+                    subreddit=post_info.get("subreddit", ""),
+                    user_instruction=text,
+                )
+                regen_data = {
+                    "post_url": post_info.get("post_url"),
+                    "post_title": post_info.get("post_title"),
+                    "post_content": post_info.get("post_content"),
+                    "subreddit": post_info.get("subreddit"),
+                    "instruction": text,
+                }
+                from app.slack_bolt_app import _post_comment_preview
+                _post_comment_preview(client, channel, thread_ts, comment, regen_data)
+            except Exception as e:
+                logger.error(f"HTTP text processing error: {e}")
+                client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=f"Error: {e}")
+
+        threading.Thread(target=_process_text, daemon=True).start()
+
+    elif event_type == "file_shared":
+        file_id = event.get("file_id")
+        if not file_id:
+            return jsonify({"ok": True})
+
+        def _process_file():
+            try:
+                file_info = client.files_info(file=file_id)
+                file_data = file_info.get("file", {})
+                mimetype = file_data.get("mimetype", "")
+                if not mimetype.startswith("audio/"):
+                    return
+
+                # Find thread
+                shares = file_data.get("shares", {})
+                channel_id = None
+                thread_ts = None
+                for share_type in ("public", "private"):
+                    for ch_id, share_list in shares.get(share_type, {}).items():
+                        for share in share_list:
+                            if share.get("thread_ts"):
+                                channel_id = ch_id
+                                thread_ts = share["thread_ts"]
+                                break
+
+                if not thread_ts:
+                    return
+
+                from app.slack_integration import load_thread_posts
+                thread_posts = load_thread_posts()
+                post_info = thread_posts.get(thread_ts)
+                if not post_info:
+                    return
+
+                download_url = file_data.get("url_private_download") or file_data.get("url_private")
+                client.chat_postMessage(channel=channel_id, thread_ts=thread_ts, text="Transcribing voice clip...")
+
+                # Try Slack transcription first
+                import time as _time
+                import requests as _requests
+                instruction = None
+                for _ in range(5):
+                    updated = client.files_info(file=file_data.get("id"))
+                    transcript = updated.get("file", {}).get("transcription", {})
+                    if transcript.get("status") == "complete":
+                        instruction = transcript.get("preview", {}).get("content", "")
+                        if instruction:
+                            break
+                    _time.sleep(3)
+
+                # Fallback to Groq Whisper
+                if not instruction:
+                    headers = {"Authorization": f"Bearer {bot_token}"}
+                    audio_response = _requests.get(download_url, headers=headers, timeout=30)
+                    audio_response.raise_for_status()
+                    from app.groq_transcriber import GroqTranscriber
+                    transcriber = GroqTranscriber(
+                        api_key=config.get("groq_api_key", ""),
+                        language=config.get("groq_language", "de"),
+                    )
+                    instruction = transcriber.transcribe(audio_response.content, file_data.get("name", "audio.ogg"))
+
+                client.chat_postMessage(
+                    channel=channel_id, thread_ts=thread_ts,
+                    text=f"*Transcription:* _{instruction}_\n\nGenerating comment...",
+                )
+
+                from app.llm_generator import LLMGenerator
+                gen = LLMGenerator(
+                    api_key=config.get("openrouter_api_key", ""),
+                    model=config.get("openrouter_model", "meta-llama/llama-3.1-70b-instruct"),
+                    persona=config.get("openrouter_persona", ""),
+                )
+                comment = gen.generate_comment(
+                    post_title=post_info.get("post_title", ""),
+                    post_content=post_info.get("post_content", ""),
+                    subreddit=post_info.get("subreddit", ""),
+                    user_instruction=instruction,
+                )
+                regen_data = {
+                    "post_url": post_info.get("post_url"),
+                    "post_title": post_info.get("post_title"),
+                    "post_content": post_info.get("post_content"),
+                    "subreddit": post_info.get("subreddit"),
+                    "instruction": instruction,
+                }
+                from app.slack_bolt_app import _post_comment_preview
+                _post_comment_preview(client, channel_id, thread_ts, comment, regen_data)
+            except Exception as e:
+                logger.error(f"HTTP file processing error: {e}")
+
+        threading.Thread(target=_process_file, daemon=True).start()
+
+    return jsonify({"ok": True})
+
+
 @app.route('/api/ai/test', methods=['POST'])
 @login_required
 def api_ai_test():
@@ -603,6 +943,7 @@ class MonitorScheduler:
         self._thread: threading.Thread = None
         self._stop_event = threading.Event()
         self._logger = logging.getLogger(__name__)
+        self._last_reply_check: float = 0
 
     @property
     def running(self) -> bool:
@@ -636,6 +977,8 @@ class MonitorScheduler:
         return now >= start or now <= end
 
     def _run_loop(self):
+        import time as _time
+
         while not self._stop_event.is_set():
             cfg = get_config()
             interval_minutes = cfg.get('scan_interval', 15)
@@ -659,6 +1002,26 @@ class MonitorScheduler:
                         run_scan_background(cfg_copy)
                     except Exception as e:
                         self._logger.error(f"Scheduled scan error: {e}")
+
+                # Reply notifications (independent timer)
+                if cfg.get('reply_notifications'):
+                    reply_interval = cfg.get('reply_check_interval', 5) * 60
+                    now = _time.time()
+                    if now - self._last_reply_check >= reply_interval:
+                        self._last_reply_check = now
+                        try:
+                            from app.reddit_actions import check_inbox_replies
+                            replies = check_inbox_replies()
+                            if replies and (cfg.get('slack_bot_token') or cfg.get('slack_webhook')):
+                                from app.slack_integration import SlackNotifier
+                                notifier = SlackNotifier(
+                                    bot_token=cfg.get('slack_bot_token'),
+                                    channel_id=cfg.get('slack_channel_id'),
+                                    webhook_url=cfg.get('slack_webhook'),
+                                )
+                                notifier.notify_replies(replies)
+                        except Exception as e:
+                            self._logger.error(f"Reply check error: {e}")
             else:
                 self._logger.debug("Outside active hours, skipping scan")
 
