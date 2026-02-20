@@ -558,6 +558,21 @@ def slack_interactions():
     action_id = actions[0].get("action_id", "") if actions else ""
     logger.info(f"Slack interaction: type={action_type}, action_id={action_id}")
 
+    # Proxy LinkedIn actions (li_* prefix) to the LinkedIn app
+    if action_id.startswith("li_"):
+        try:
+            import requests as _req
+            resp = _req.post(
+                "http://127.0.0.1:5002/slack/interactions",
+                data={"payload": payload_str},
+                timeout=5,
+            )
+            logger.info(f"Proxied {action_id} to LinkedIn app: HTTP {resp.status_code}")
+            return jsonify(resp.json()), resp.status_code
+        except Exception as e:
+            logger.error(f"Failed to proxy {action_id} to LinkedIn app: {e}")
+            return jsonify({"ok": False, "error": str(e)}), 502
+
     # Get channel and thread
     channel = payload.get("channel", {}).get("id", "")
     msg = payload.get("message", {})
@@ -813,6 +828,20 @@ def slack_interactions():
     return jsonify({"ok": True})
 
 
+def _proxy_event_to_linkedin(event_data):
+    """Forward an unmatched Slack event to the LinkedIn app."""
+    try:
+        import requests as _req
+        resp = _req.post(
+            "http://127.0.0.1:5002/slack/events",
+            json=event_data,
+            timeout=5,
+        )
+        logger.info(f"Proxied event to LinkedIn app: HTTP {resp.status_code}")
+    except Exception as e:
+        logger.debug(f"LinkedIn event proxy failed: {e}")
+
+
 @app.route('/slack/events', methods=['POST'])
 def slack_events():
     """HTTP endpoint for Slack Events API (messages, file_shared).
@@ -858,6 +887,8 @@ def slack_events():
         thread_posts = load_thread_posts()
         post_info = thread_posts.get(thread_ts)
         if not post_info:
+            # Not a Reddit thread — proxy to LinkedIn app
+            _proxy_event_to_linkedin(data)
             return jsonify({"ok": True})
 
         client.chat_postMessage(channel=channel, thread_ts=thread_ts, text="Generating comment...")
@@ -925,6 +956,8 @@ def slack_events():
                 thread_posts = load_thread_posts()
                 post_info = thread_posts.get(thread_ts)
                 if not post_info:
+                    # Not a Reddit thread — proxy to LinkedIn app
+                    _proxy_event_to_linkedin(data)
                     return
 
                 download_url = file_data.get("url_private_download") or file_data.get("url_private")

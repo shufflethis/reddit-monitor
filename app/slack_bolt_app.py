@@ -419,6 +419,8 @@ def create_bolt_app(bot_token: str) -> App:
         thread_posts = load_thread_posts()
         post_info = thread_posts.get(thread_ts)
         if not post_info:
+            # Not a Reddit thread — proxy to LinkedIn app
+            _proxy_event_to_linkedin({"event": event, "type": "event_callback"})
             return
 
         # Capture URL for background download
@@ -516,7 +518,9 @@ def create_bolt_app(bot_token: str) -> App:
         thread_posts = load_thread_posts()
         post_info = thread_posts.get(thread_ts)
         if not post_info:
-            return  # Not a thread we're tracking
+            # Not a Reddit thread — proxy to LinkedIn app
+            _proxy_event_to_linkedin({"event": event, "type": "event_callback"})
+            return
 
         cfg = _get_config()
 
@@ -559,6 +563,20 @@ def create_bolt_app(bot_token: str) -> App:
         threading.Thread(target=_process_text, daemon=True).start()
 
     return bolt_app
+
+
+def _proxy_event_to_linkedin(event_data):
+    """Forward an unmatched Slack event to the LinkedIn app's /slack/events endpoint."""
+    try:
+        import requests as _req
+        resp = _req.post(
+            "http://127.0.0.1:5002/slack/events",
+            json=event_data,
+            timeout=5,
+        )
+        logger.info(f"Proxied event to LinkedIn app: HTTP {resp.status_code}")
+    except Exception as e:
+        logger.debug(f"LinkedIn proxy failed (may not be running): {e}")
 
 
 def _post_comment_preview(client, channel, thread_ts, comment_text, regen_data):
