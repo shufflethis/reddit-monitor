@@ -145,6 +145,79 @@ def create_bolt_app(bot_token: str) -> App:
             text=f"Post ignored: _{title}_",
         )
 
+    # ── Button: Upvote Reply ────────────────────────────────────────
+    @bolt_app.action("upvote_reply")
+    def handle_upvote_reply(ack, body, client):
+        ack()
+        post_data = _get_post_data(body)
+        if not post_data:
+            return
+
+        thread_ts = _get_thread_ts(body)
+        channel = _get_channel(body)
+        reply_name = post_data.get("name", "")
+
+        client.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text="Upvoting reply on Reddit...",
+        )
+
+        def _do_upvote():
+            try:
+                cfg = _get_config()
+                from .reddit_actions import run_upvote
+                success = run_upvote(
+                    cfg.get("reddit_username", ""),
+                    cfg.get("reddit_password", ""),
+                    post_data.get("context", ""),
+                    post_id_override=reply_name,
+                )
+                msg = "Upvote successful!" if success else "Upvote failed — check logs."
+                client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=msg)
+            except Exception as e:
+                logger.error(f"Upvote reply error: {e}")
+                client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=f"Upvote error: {e}")
+
+        threading.Thread(target=_do_upvote, daemon=True).start()
+
+    # ── Button: Reply to Reply ──────────────────────────────────────
+    @bolt_app.action("reply_to_reply")
+    def handle_reply_to_reply(ack, body, client):
+        ack()
+        post_data = _get_post_data(body)
+        if not post_data:
+            return
+
+        thread_ts = _get_thread_ts(body)
+        channel = _get_channel(body)
+
+        # Store reply data in thread mapping
+        thread_posts = load_thread_posts()
+        if thread_ts:
+            from datetime import datetime
+            thread_posts[thread_ts] = {
+                "post_id": post_data.get("name", ""),
+                "post_url": post_data.get("context", ""),
+                "post_title": post_data.get("link_title", ""),
+                "post_content": post_data.get("body", ""),
+                "subreddit": post_data.get("subreddit", ""),
+                "is_reply": True,
+                "stored_at": datetime.now().isoformat(),
+            }
+            save_thread_posts(thread_posts)
+
+        client.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text="Send a voice clip or text message in this thread with your reply instructions.\nExample: _\"thank them for the helpful advice\"_",
+        )
+
+    # ── Button: View Reply on Reddit (no-op ack) ────────────────────
+    @bolt_app.action("view_reply_on_reddit")
+    def handle_view_reply(ack):
+        ack()
+
     # ── Button: Post comment to Reddit ──────────────────────────────
     @bolt_app.action("confirm_post")
     def handle_confirm_post(ack, body, client):
@@ -185,6 +258,7 @@ def create_bolt_app(bot_token: str) -> App:
                     password,
                     data["post_url"],
                     data["comment_text"],
+                    thing_id=data.get("thing_id", ""),
                 )
                 msg = "Comment posted successfully!" if success else "Failed to post comment — check logs."
                 client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=msg)
@@ -234,6 +308,81 @@ def create_bolt_app(bot_token: str) -> App:
                 client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=f"Regeneration error: {e}")
 
         threading.Thread(target=_do_regenerate, daemon=True).start()
+
+    # ── Button: Edit comment ────────────────────────────────────────
+    @bolt_app.action("edit_comment")
+    def handle_edit_comment(ack, body, client):
+        ack()
+        actions = body.get("actions", [])
+        if not actions:
+            return
+
+        trigger_id = body.get("trigger_id")
+        if not trigger_id:
+            return
+
+        value = actions[0].get("value", "{}")
+        try:
+            data = json.loads(value)
+        except Exception:
+            return
+
+        thread_ts = _get_thread_ts(body)
+        channel = _get_channel(body)
+
+        private_metadata = json.dumps({
+            "channel": channel,
+            "thread_ts": thread_ts,
+            "regen_data": data.get("regen_data", {}),
+        })
+
+        client.views_open(
+            trigger_id=trigger_id,
+            view={
+                "type": "modal",
+                "callback_id": "edit_comment_modal",
+                "title": {"type": "plain_text", "text": "Edit Comment"},
+                "submit": {"type": "plain_text", "text": "Update Preview"},
+                "close": {"type": "plain_text", "text": "Cancel"},
+                "private_metadata": private_metadata,
+                "blocks": [
+                    {
+                        "type": "input",
+                        "block_id": "comment_block",
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "comment_text",
+                            "multiline": True,
+                            "initial_value": data.get("comment_text", ""),
+                        },
+                        "label": {"type": "plain_text", "text": "Comment"},
+                    }
+                ],
+            },
+        )
+
+    # ── Modal: Edit comment submission ──────────────────────────────
+    @bolt_app.view("edit_comment_modal")
+    def handle_edit_comment_submit(ack, body, client, view):
+        ack()
+        # Extract edited text
+        values = view.get("state", {}).get("values", {})
+        edited_text = values.get("comment_block", {}).get("comment_text", {}).get("value", "")
+
+        # Extract context from private_metadata
+        try:
+            meta = json.loads(view.get("private_metadata", "{}"))
+        except Exception:
+            return
+
+        channel = meta.get("channel", "")
+        thread_ts = meta.get("thread_ts", "")
+        regen_data = meta.get("regen_data", {})
+
+        if not channel or not thread_ts:
+            return
+
+        _post_comment_preview(client, channel, thread_ts, edited_text, regen_data)
 
     # ── Event: file_shared (voice clip) ─────────────────────────────
     @bolt_app.event("file_shared")
@@ -336,6 +485,8 @@ def create_bolt_app(bot_token: str) -> App:
                     "subreddit": post_info.get("subreddit"),
                     "instruction": instruction,
                 }
+                if post_info.get("is_reply"):
+                    regen_data["thing_id"] = post_info.get("post_id", "")
                 _post_comment_preview(client, channel_id, thread_ts, comment, regen_data)
 
             except Exception as e:
@@ -397,6 +548,8 @@ def create_bolt_app(bot_token: str) -> App:
                     "subreddit": post_info.get("subreddit"),
                     "instruction": text,
                 }
+                if post_info.get("is_reply"):
+                    regen_data["thing_id"] = post_info.get("post_id", "")
                 _post_comment_preview(client, channel, thread_ts, comment, regen_data)
 
             except Exception as e:
@@ -409,12 +562,26 @@ def create_bolt_app(bot_token: str) -> App:
 
 
 def _post_comment_preview(client, channel, thread_ts, comment_text, regen_data):
-    """Post a comment preview with [Post to Reddit] and [Regenerate] buttons"""
+    """Post a comment preview with [Post to Reddit], [Edit], and [Regenerate] buttons"""
     confirm_value = json.dumps({
         "post_url": regen_data.get("post_url"),
         "comment_text": comment_text,
+        "thing_id": regen_data.get("thing_id", ""),
     })
     regen_value = json.dumps(regen_data)
+
+    # Edit button value: comment text + regen_data (truncated for 2000-char Slack limit)
+    edit_value = json.dumps({
+        "comment_text": comment_text,
+        "regen_data": {
+            "post_url": regen_data.get("post_url"),
+            "post_title": regen_data.get("post_title", "")[:200],
+            "post_content": regen_data.get("post_content", "")[:200],
+            "subreddit": regen_data.get("subreddit", ""),
+            "instruction": regen_data.get("instruction", "")[:200],
+            "thing_id": regen_data.get("thing_id", ""),
+        },
+    })
 
     blocks = [
         {
@@ -433,6 +600,12 @@ def _post_comment_preview(client, channel, thread_ts, comment_text, regen_data):
                     "style": "primary",
                     "value": confirm_value,
                     "action_id": "confirm_post",
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Edit"},
+                    "value": edit_value,
+                    "action_id": "edit_comment",
                 },
                 {
                     "type": "button",

@@ -322,7 +322,10 @@ def run_upvote(username: str, password: str, post_url: str, post_id_override: st
     """Upvote a Reddit post"""
     post_id = ""
     if post_id_override:
-        post_id = f"t3_{post_id_override}" if not post_id_override.startswith("t3_") else post_id_override
+        if post_id_override.startswith(("t1_", "t3_")):
+            post_id = post_id_override
+        else:
+            post_id = f"t3_{post_id_override}"
     else:
         post_id = _url_to_fullname(post_url)
     if not post_id:
@@ -382,9 +385,13 @@ def _post_comment_request(session, post_id: str, text: str, post_url: str) -> di
         return {"ok": False, "retry": False, "error": f"HTTP {resp.status_code}"}
 
 
-def run_comment(username: str, password: str, post_url: str, text: str, **kwargs) -> bool:
-    """Post a comment on a Reddit post"""
-    post_id = _url_to_fullname(post_url)
+def run_comment(username: str, password: str, post_url: str, text: str, thing_id: str = "", **kwargs) -> bool:
+    """Post a comment on a Reddit post or reply to a comment.
+    If thing_id is set (e.g. t1_xxx), use it directly instead of parsing the URL."""
+    if thing_id:
+        post_id = thing_id
+    else:
+        post_id = _url_to_fullname(post_url)
     if not post_id:
         logger.error(f"Could not extract post ID from URL: {post_url}")
         return False
@@ -462,6 +469,8 @@ def check_inbox_replies() -> list:
                 "link_title": item_data.get("link_title", ""),
                 "subreddit": item_data.get("subreddit", ""),
                 "context": context_url,
+                "name": item_data.get("name", ""),
+                "parent_id": item_data.get("parent_id", ""),
             })
             read_ids.append(item_data.get("name", ""))
 

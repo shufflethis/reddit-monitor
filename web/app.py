@@ -595,6 +595,7 @@ def slack_interactions():
                     config.get("reddit_password", ""),
                     data.get("post_url", ""),
                     data.get("comment_text", ""),
+                    thing_id=data.get("thing_id", ""),
                 )
                 _reply("Comment posted successfully!" if success else "Failed to post comment — check logs.")
             except Exception as e:
@@ -689,8 +690,125 @@ def slack_interactions():
 
         threading.Thread(target=_do_regen, daemon=True).start()
 
+    elif action_id == "upvote_reply":
+        value = actions[0].get("value", "{}")
+        try:
+            data = _json.loads(value)
+        except Exception:
+            return jsonify({"ok": True})
+
+        reply_name = data.get("name", "")
+        _reply("Upvoting reply on Reddit...")
+
+        def _do_upvote_reply():
+            try:
+                from app.reddit_actions import run_upvote
+                success = run_upvote(
+                    config.get("reddit_username", ""),
+                    config.get("reddit_password", ""),
+                    data.get("context", ""),
+                    post_id_override=reply_name,
+                )
+                _reply("Upvote successful!" if success else "Upvote failed — check logs.")
+            except Exception as e:
+                logger.error(f"HTTP upvote reply error: {e}")
+                _reply(f"Upvote error: {e}")
+
+        threading.Thread(target=_do_upvote_reply, daemon=True).start()
+
+    elif action_id == "reply_to_reply":
+        value = actions[0].get("value", "{}")
+        try:
+            data = _json.loads(value)
+        except Exception:
+            return jsonify({"ok": True})
+
+        from app.slack_integration import load_thread_posts, save_thread_posts
+        thread_posts = load_thread_posts()
+        if thread_ts:
+            from datetime import datetime as _dt
+            thread_posts[thread_ts] = {
+                "post_id": data.get("name", ""),
+                "post_url": data.get("context", ""),
+                "post_title": data.get("link_title", ""),
+                "post_content": data.get("body", ""),
+                "subreddit": data.get("subreddit", ""),
+                "is_reply": True,
+                "stored_at": _dt.now().isoformat(),
+            }
+            save_thread_posts(thread_posts)
+
+        _reply("Send a voice clip or text message in this thread with your reply instructions.\nExample: _\"thank them for the helpful advice\"_")
+
+    elif action_id == "view_reply_on_reddit":
+        pass  # No-op, link button
+
+    elif action_id == "edit_comment":
+        value = actions[0].get("value", "{}")
+        try:
+            data = _json.loads(value)
+        except Exception:
+            return jsonify({"ok": True})
+
+        trigger_id = payload.get("trigger_id", "")
+        if trigger_id:
+            private_metadata = _json.dumps({
+                "channel": channel,
+                "thread_ts": thread_ts,
+                "regen_data": data.get("regen_data", {}),
+            })
+            try:
+                client.views_open(
+                    trigger_id=trigger_id,
+                    view={
+                        "type": "modal",
+                        "callback_id": "edit_comment_modal",
+                        "title": {"type": "plain_text", "text": "Edit Comment"},
+                        "submit": {"type": "plain_text", "text": "Update Preview"},
+                        "close": {"type": "plain_text", "text": "Cancel"},
+                        "private_metadata": private_metadata,
+                        "blocks": [
+                            {
+                                "type": "input",
+                                "block_id": "comment_block",
+                                "element": {
+                                    "type": "plain_text_input",
+                                    "action_id": "comment_text",
+                                    "multiline": True,
+                                    "initial_value": data.get("comment_text", ""),
+                                },
+                                "label": {"type": "plain_text", "text": "Comment"},
+                            }
+                        ],
+                    },
+                )
+            except Exception as e:
+                logger.error(f"HTTP edit modal error: {e}")
+
     else:
         logger.info(f"Unhandled action_id: {action_id}")
+
+    # Handle view_submission (modal submissions)
+    if action_type == "view_submission":
+        view = payload.get("view", {})
+        callback_id = view.get("callback_id", "")
+
+        if callback_id == "edit_comment_modal":
+            values = view.get("state", {}).get("values", {})
+            edited_text = values.get("comment_block", {}).get("comment_text", {}).get("value", "")
+
+            try:
+                meta = _json.loads(view.get("private_metadata", "{}"))
+            except Exception:
+                return jsonify({"ok": True})
+
+            modal_channel = meta.get("channel", "")
+            modal_thread_ts = meta.get("thread_ts", "")
+            regen_data = meta.get("regen_data", {})
+
+            if modal_channel and modal_thread_ts:
+                from app.slack_bolt_app import _post_comment_preview
+                _post_comment_preview(client, modal_channel, modal_thread_ts, edited_text, regen_data)
 
     return jsonify({"ok": True})
 
@@ -765,6 +883,8 @@ def slack_events():
                     "subreddit": post_info.get("subreddit"),
                     "instruction": text,
                 }
+                if post_info.get("is_reply"):
+                    regen_data["thing_id"] = post_info.get("post_id", "")
                 from app.slack_bolt_app import _post_comment_preview
                 _post_comment_preview(client, channel, thread_ts, comment, regen_data)
             except Exception as e:
@@ -859,6 +979,8 @@ def slack_events():
                     "subreddit": post_info.get("subreddit"),
                     "instruction": instruction,
                 }
+                if post_info.get("is_reply"):
+                    regen_data["thing_id"] = post_info.get("post_id", "")
                 from app.slack_bolt_app import _post_comment_preview
                 _post_comment_preview(client, channel_id, thread_ts, comment, regen_data)
             except Exception as e:

@@ -253,21 +253,49 @@ class SlackNotifier:
             ]
 
             context_url = reply.get("context", "")
+            reply_name = reply.get("name", "")
+
             if context_url:
+                action_elements = []
+
+                if reply_name:
+                    reply_value = json.dumps({
+                        "name": reply_name,
+                        "parent_id": reply.get("parent_id", ""),
+                        "context": context_url,
+                        "author": reply.get("author", ""),
+                        "body": reply.get("body", "")[:500],
+                        "subreddit": reply.get("subreddit", ""),
+                        "link_title": reply.get("link_title", ""),
+                    })
+                    action_elements.append({
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Upvote", "emoji": True},
+                        "style": "primary",
+                        "value": reply_value,
+                        "action_id": "upvote_reply",
+                    })
+                    action_elements.append({
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Reply", "emoji": True},
+                        "value": reply_value,
+                        "action_id": "reply_to_reply",
+                    })
+
+                action_elements.append({
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "Auf Reddit ansehen",
+                        "emoji": True,
+                    },
+                    "url": context_url,
+                    "action_id": "view_reply_on_reddit",
+                })
+
                 blocks.append({
                     "type": "actions",
-                    "elements": [
-                        {
-                            "type": "button",
-                            "text": {
-                                "type": "plain_text",
-                                "text": "Auf Reddit ansehen",
-                                "emoji": True,
-                            },
-                            "url": context_url,
-                            "action_id": "view_reply_on_reddit",
-                        }
-                    ],
+                    "elements": action_elements,
                 })
 
             blocks.append({"type": "divider"})
